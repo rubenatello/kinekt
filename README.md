@@ -53,6 +53,8 @@ Query the indexed context:
 kinekt query "where is developer profile stored?" --limit 5
 ```
 
+`--limit` is clamped to `1..20` for safety.
+
 Show git context:
 
 ```bash
@@ -64,6 +66,8 @@ Read a workspace file safely (path traversal protected):
 ```bash
 kinekt read-file src/main.py --workspace /path/to/workspace --max-chars 2000
 ```
+
+`--max-chars` is clamped to `1..50000` for safety.
 
 Run FastMCP server over stdio:
 

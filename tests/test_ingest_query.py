@@ -62,3 +62,18 @@ def test_ingest_excludes_cache_directories(tmp_path: Path) -> None:
     stats = ingest_workspace(conn, workspace)
     assert stats.scanned == 1
     assert stats.updated == 1
+
+
+def test_query_limit_is_clamped(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+
+    for i in range(30):
+        (workspace / f"n{i}.md").write_text(f"# Note {i}\nlocal context {i}")
+
+    conn = connect(tmp_path / "kinekt.sqlite3")
+    ensure_schema(conn)
+    ingest_workspace(conn, workspace)
+
+    results = query_knowledge_base(conn, "local context", limit=500)
+    assert len(results) <= 20
