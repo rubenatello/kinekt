@@ -4,15 +4,19 @@ from pathlib import Path
 from typing import Any
 
 from .agent_core import run_agent_turn
+from .limits import (
+    clamp_agent_history_window,
+    clamp_agent_query_limit,
+    clamp_history_limit,
+    clamp_query_limit,
+    clamp_read_chars,
+)
 from .query import query_knowledge_base
 from .session_store import create_session, list_messages
 from .storage import connect, ensure_schema
 from .tools import get_git_context, read_workspace_file
 
-_MAX_READ_CHARS = 50_000
 _DEFAULT_READ_CHARS = 4_000
-_MAX_QUERY_LIMIT = 20
-_MAX_HISTORY_LIMIT = 100
 
 
 def _workspace_db_path(workspace: str) -> Path:
@@ -26,7 +30,7 @@ def _workspace_conn(workspace: str):
 
 
 def tool_query_knowledge_base(query: str, workspace: str = ".", limit: int = 5) -> list[dict[str, Any]]:
-    safe_limit = max(1, min(limit, _MAX_QUERY_LIMIT))
+    safe_limit = clamp_query_limit(limit)
     conn = _workspace_conn(workspace)
     rows = query_knowledge_base(conn, query, limit=safe_limit)
     return [
@@ -50,7 +54,7 @@ def tool_read_workspace_file(
     workspace: str = ".",
     max_chars: int = _DEFAULT_READ_CHARS,
 ) -> str:
-    safe_max_chars = max(1, min(max_chars, _MAX_READ_CHARS))
+    safe_max_chars = clamp_read_chars(max_chars)
     return read_workspace_file(Path(workspace), file_path, max_chars=safe_max_chars)
 
 
@@ -61,7 +65,7 @@ def tool_session_start(workspace: str = ".", session_id: str | None = None) -> s
 
 def tool_session_history(session_id: str, workspace: str = ".", limit: int = 30) -> list[dict[str, str]]:
     conn = _workspace_conn(workspace)
-    safe_limit = max(1, min(limit, _MAX_HISTORY_LIMIT))
+    safe_limit = clamp_history_limit(limit)
     rows = list_messages(conn, session_id=session_id, limit=safe_limit)
     return [
         {
@@ -83,13 +87,15 @@ def tool_agent_turn(
     history_window: int = 6,
 ) -> dict[str, Any]:
     conn = _workspace_conn(workspace)
+    safe_query_limit = clamp_agent_query_limit(query_limit)
+    safe_history_window = clamp_agent_history_window(history_window)
     result = run_agent_turn(
         conn=conn,
         workspace=Path(workspace),
         user_message=message,
         session_id=session_id,
-        query_limit=query_limit,
-        history_window=history_window,
+        query_limit=safe_query_limit,
+        history_window=safe_history_window,
     )
     return {"session_id": result.session_id, "reply": result.reply, "hits": result.hits}
 

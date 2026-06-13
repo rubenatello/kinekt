@@ -5,6 +5,13 @@ from pathlib import Path
 
 from .agent_core import run_agent_turn
 from .ingest import ingest_workspace
+from .limits import (
+    clamp_agent_history_window,
+    clamp_agent_query_limit,
+    clamp_history_limit,
+    clamp_query_limit,
+    clamp_read_chars,
+)
 from .mcp_server import run_stdio_server
 from .query import query_knowledge_base
 from .session_store import create_session, list_messages
@@ -38,7 +45,8 @@ def _cmd_ingest(args: argparse.Namespace) -> int:
 
 def _cmd_query(args: argparse.Namespace) -> int:
     conn = _connect_workspace(args.workspace)
-    results = query_knowledge_base(conn, args.query, limit=args.limit)
+    safe_limit = clamp_query_limit(args.limit)
+    results = query_knowledge_base(conn, args.query, limit=safe_limit)
     if not results:
         print("No results found. Run ingest first.")
         return 0
@@ -56,7 +64,8 @@ def _cmd_git_context(args: argparse.Namespace) -> int:
 
 
 def _cmd_read_file(args: argparse.Namespace) -> int:
-    print(read_workspace_file(Path(args.workspace), args.file_path, max_chars=args.max_chars))
+    safe_max_chars = clamp_read_chars(args.max_chars)
+    print(read_workspace_file(Path(args.workspace), args.file_path, max_chars=safe_max_chars))
     return 0
 
 
@@ -73,7 +82,8 @@ def _cmd_session_start(args: argparse.Namespace) -> int:
 
 def _cmd_session_history(args: argparse.Namespace) -> int:
     conn = _connect_workspace(args.workspace)
-    rows = list_messages(conn, session_id=args.session_id, limit=args.limit)
+    safe_limit = clamp_history_limit(args.limit)
+    rows = list_messages(conn, session_id=args.session_id, limit=safe_limit)
     if not rows:
         print("No messages for this session.")
         return 0
@@ -85,13 +95,15 @@ def _cmd_session_history(args: argparse.Namespace) -> int:
 
 def _cmd_agent_turn(args: argparse.Namespace) -> int:
     conn = _connect_workspace(args.workspace)
+    safe_query_limit = clamp_agent_query_limit(args.query_limit)
+    safe_history_window = clamp_agent_history_window(args.history_window)
     result = run_agent_turn(
         conn=conn,
         workspace=Path(args.workspace),
         user_message=args.message,
         session_id=args.session_id,
-        query_limit=args.query_limit,
-        history_window=args.history_window,
+        query_limit=safe_query_limit,
+        history_window=safe_history_window,
     )
     print(result.reply)
     print(f"\nSession ID: {result.session_id}")

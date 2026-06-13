@@ -4,11 +4,9 @@ from dataclasses import dataclass
 from pathlib import Path
 import sqlite3
 
+from .limits import clamp_agent_history_window, clamp_agent_query_limit
 from .query import query_knowledge_base
 from .session_store import append_message, create_session, list_messages
-
-_MAX_QUERY_LIMIT = 10
-_MAX_HISTORY_WINDOW = 20
 
 
 @dataclass(frozen=True)
@@ -37,8 +35,8 @@ def run_agent_turn(
     sid = create_session(conn, session_id=session_id)
     append_message(conn, sid, "user", clean_message)
 
-    safe_query_limit = max(1, min(query_limit, _MAX_QUERY_LIMIT))
-    safe_history_window = max(1, min(history_window, _MAX_HISTORY_WINDOW))
+    safe_query_limit = clamp_agent_query_limit(query_limit)
+    safe_history_window = clamp_agent_history_window(history_window)
 
     hits = query_knowledge_base(conn, clean_message, limit=safe_query_limit)
     history = list_messages(conn, sid, limit=safe_history_window * 2)
