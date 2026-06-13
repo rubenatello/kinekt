@@ -3,31 +3,41 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
+from .agent_core import run_agent_turn
 from .ingest import ingest_workspace
 from .mcp_server import run_stdio_server
 from .query import query_knowledge_base
+from .session_store import create_session, list_messages
 from .storage import connect, ensure_schema
 from .tools import get_git_context, read_workspace_file
 
 
-def _cmd_init(_args: argparse.Namespace) -> int:
-    conn = connect()
+def _workspace_db_path(workspace: str) -> Path:
+    return Path(workspace).resolve() / ".kinekt" / "kinekt.sqlite3"
+
+
+def _connect_workspace(workspace: str):
+    conn = connect(_workspace_db_path(workspace))
+    ensure_schema(conn)
+    return conn
+
+
+def _cmd_init(args: argparse.Namespace) -> int:
+    conn = _connect_workspace(args.workspace)
     ensure_schema(conn)
     print(f"Initialized Kinekt database at {Path(conn.execute('PRAGMA database_list').fetchone()['file'])}")
     return 0
 
 
 def _cmd_ingest(args: argparse.Namespace) -> int:
-    conn = connect()
-    ensure_schema(conn)
+    conn = _connect_workspace(args.workspace)
     stats = ingest_workspace(conn, Path(args.workspace))
     print(f"Scanned: {stats.scanned} | Updated: {stats.updated} | Skipped: {stats.skipped}")
     return 0
 
 
 def _cmd_query(args: argparse.Namespace) -> int:
-    conn = connect()
-    ensure_schema(conn)
+    conn = _connect_workspace(args.workspace)
     results = query_knowledge_base(conn, args.query, limit=args.limit)
     if not results:
         print("No results found. Run ingest first.")
@@ -54,11 +64,46 @@ def _cmd_mcp_serve(_args: argparse.Namespace) -> int:
     return run_stdio_server()
 
 
+def _cmd_session_start(args: argparse.Namespace) -> int:
+    conn = _connect_workspace(args.workspace)
+    sid = create_session(conn, session_id=args.session_id)
+    print(sid)
+    return 0
+
+
+def _cmd_session_history(args: argparse.Namespace) -> int:
+    conn = _connect_workspace(args.workspace)
+    rows = list_messages(conn, session_id=args.session_id, limit=args.limit)
+    if not rows:
+        print("No messages for this session.")
+        return 0
+    for row in rows:
+        preview = " ".join(row.content.split())[:220]
+        print(f"{row.timestamp} [{row.role}] {preview}")
+    return 0
+
+
+def _cmd_agent_turn(args: argparse.Namespace) -> int:
+    conn = _connect_workspace(args.workspace)
+    result = run_agent_turn(
+        conn=conn,
+        workspace=Path(args.workspace),
+        user_message=args.message,
+        session_id=args.session_id,
+        query_limit=args.query_limit,
+        history_window=args.history_window,
+    )
+    print(result.reply)
+    print(f"\nSession ID: {result.session_id}")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="kinekt", description="Kinekt local-first context engine")
     sub = parser.add_subparsers(dest="command", required=True)
 
     p_init = sub.add_parser("init", help="Initialize local Kinekt database")
+    p_init.add_argument("workspace", nargs="?", default=".")
     p_init.set_defaults(func=_cmd_init)
 
     p_ingest = sub.add_parser("ingest", help="Ingest workspace code and markdown")
@@ -67,6 +112,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_query = sub.add_parser("query", help="Query indexed knowledge base")
     p_query.add_argument("query")
+    p_query.add_argument("--workspace", default=".")
     p_query.add_argument("--limit", type=int, default=5)
     p_query.set_defaults(func=_cmd_query)
 
@@ -82,6 +128,25 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_mcp = sub.add_parser("mcp-serve", help="Run FastMCP server over stdio")
     p_mcp.set_defaults(func=_cmd_mcp_serve)
+
+    p_session_start = sub.add_parser("session-start", help="Create or ensure a session ID")
+    p_session_start.add_argument("--workspace", default=".")
+    p_session_start.add_argument("--session-id")
+    p_session_start.set_defaults(func=_cmd_session_start)
+
+    p_session_history = sub.add_parser("session-history", help="List session messages")
+    p_session_history.add_argument("session_id")
+    p_session_history.add_argument("--workspace", default=".")
+    p_session_history.add_argument("--limit", type=int, default=30)
+    p_session_history.set_defaults(func=_cmd_session_history)
+
+    p_agent_turn = sub.add_parser("agent-turn", help="Run a stateful agent turn")
+    p_agent_turn.add_argument("message")
+    p_agent_turn.add_argument("--workspace", default=".")
+    p_agent_turn.add_argument("--session-id")
+    p_agent_turn.add_argument("--query-limit", type=int, default=4)
+    p_agent_turn.add_argument("--history-window", type=int, default=6)
+    p_agent_turn.set_defaults(func=_cmd_agent_turn)
 
     return parser
 

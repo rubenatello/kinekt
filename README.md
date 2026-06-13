@@ -11,7 +11,8 @@ This repository now includes a working local-first core with:
 - Local SQLite persistence with the design document schema (`sessions`, `thread_messages`, `file_registry`, `developer_profile`)
 - Local chunk storage and deterministic embedding fallback for semantic retrieval
 - CLI commands for ingestion, querying, git context, and safe file reads
-- FastMCP server mode exposing `query_knowledge_base`, `get_git_context`, and `read_workspace_file`
+- FastMCP server mode exposing `query_knowledge_base`, `get_git_context`, `read_workspace_file`, `session_start`, `session_history`, and `agent_turn`
+- Stateful session persistence (`sessions`, `thread_messages`) and deterministic agent turns
 
 ## Setup
 
@@ -68,6 +69,24 @@ Run FastMCP server over stdio:
 
 ```bash
 kinekt mcp-serve
+```
+
+Start or reuse a session:
+
+```bash
+kinekt session-start --workspace /path/to/workspace
+```
+
+Run a stateful agent turn:
+
+```bash
+kinekt agent-turn "how is context stored?" --workspace /path/to/workspace --session-id <session-id>
+```
+
+Inspect session history:
+
+```bash
+kinekt session-history <session-id> --workspace /path/to/workspace --limit 30
 ```
 
 ## Run tests

@@ -46,3 +46,19 @@ def test_ingest_skips_unchanged_files(tmp_path: Path) -> None:
 
     assert first.updated == 1
     assert second.skipped == 1
+
+
+def test_ingest_excludes_cache_directories(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    (workspace / ".pytest_cache").mkdir()
+    (workspace / ".pytest_cache" / "README.md").write_text("cache content should not be indexed")
+    (workspace / "notes.md").write_text("# Heading\nreal content")
+
+    db_path = tmp_path / "kinekt.sqlite3"
+    conn = connect(db_path)
+    ensure_schema(conn)
+
+    stats = ingest_workspace(conn, workspace)
+    assert stats.scanned == 1
+    assert stats.updated == 1

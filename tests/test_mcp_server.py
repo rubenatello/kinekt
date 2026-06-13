@@ -5,7 +5,13 @@ from pathlib import Path
 import pytest
 
 from kinekt.ingest import ingest_workspace
-from kinekt.mcp_server import tool_query_knowledge_base, tool_read_workspace_file
+from kinekt.mcp_server import (
+    tool_agent_turn,
+    tool_query_knowledge_base,
+    tool_read_workspace_file,
+    tool_session_history,
+    tool_session_start,
+)
 from kinekt.storage import connect, ensure_schema
 
 
@@ -45,3 +51,21 @@ def test_tool_read_workspace_file_blocks_path_escape(tmp_path: Path) -> None:
 
     with pytest.raises(ValueError):
         tool_read_workspace_file(file_path="../outside.txt", workspace=str(workspace))
+
+
+def test_tool_agent_turn_and_session_history(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    (workspace / "notes.md").write_text("# Notes\nsession based memory")
+
+    conn = connect(workspace / ".kinekt" / "kinekt.sqlite3")
+    ensure_schema(conn)
+    ingest_workspace(conn, workspace)
+
+    sid = tool_session_start(workspace=str(workspace))
+    turn = tool_agent_turn(message="where is session memory?", workspace=str(workspace), session_id=sid)
+    history = tool_session_history(session_id=sid, workspace=str(workspace), limit=10)
+
+    assert turn["session_id"] == sid
+    assert history
+    assert history[0]["role"] == "user"

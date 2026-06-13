@@ -9,6 +9,7 @@ from .chunking import embed_text, file_hash, split_markdown_file, split_python_f
 
 CODE_EXTENSIONS = {".py", ".js", ".ts", ".tsx", ".jsx", ".go", ".rs", ".java", ".c", ".cpp"}
 MARKDOWN_EXTENSIONS = {".md", ".markdown", ".mdx"}
+EXCLUDED_DIR_NAMES = {".git", ".kinekt", ".pytest_cache", "__pycache__", ".venv", "venv", ".mypy_cache"}
 
 
 @dataclass(frozen=True)
@@ -93,7 +94,7 @@ def ingest_workspace(conn: sqlite3.Connection, workspace: Path) -> IngestStats:
     for path in workspace.rglob("*"):
         if not path.is_file():
             continue
-        if ".git" in path.parts or ".kinekt" in path.parts:
+        if any(part in EXCLUDED_DIR_NAMES for part in path.parts):
             continue
 
         ext = path.suffix.lower()
