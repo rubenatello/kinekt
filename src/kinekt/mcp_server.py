@@ -1,0 +1,149 @@
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Any
+
+from .agent_core import run_agent_turn
+from .query import query_knowledge_base
+from .session_store import create_session, list_messages
+from .storage import connect, ensure_schema
+from .tools import get_git_context, read_workspace_file
+
+_MAX_READ_CHARS = 50_000
+_DEFAULT_READ_CHARS = 4_000
+_MAX_QUERY_LIMIT = 20
+_MAX_HISTORY_LIMIT = 100
+
+
+def _workspace_db_path(workspace: str) -> Path:
+    return Path(workspace).resolve() / ".kinekt" / "kinekt.sqlite3"
+
+
+def _workspace_conn(workspace: str):
+    conn = connect(_workspace_db_path(workspace))
+    ensure_schema(conn)
+    return conn
+
+
+def tool_query_knowledge_base(query: str, workspace: str = ".", limit: int = 5) -> list[dict[str, Any]]:
+    safe_limit = max(1, min(limit, _MAX_QUERY_LIMIT))
+    conn = _workspace_conn(workspace)
+    rows = query_knowledge_base(conn, query, limit=safe_limit)
+    return [
+        {
+            "chunk_id": row.chunk_id,
+            "file_path": row.file_path,
+            "score": row.score,
+            "source": row.source,
+            "content": row.content,
+        }
+        for row in rows
+    ]
+
+
+def tool_get_git_context(workspace: str = ".") -> str:
+    return get_git_context(Path(workspace))
+
+
+def tool_read_workspace_file(
+    file_path: str,
+    workspace: str = ".",
+    max_chars: int = _DEFAULT_READ_CHARS,
+) -> str:
+    safe_max_chars = max(1, min(max_chars, _MAX_READ_CHARS))
+    return read_workspace_file(Path(workspace), file_path, max_chars=safe_max_chars)
+
+
+def tool_session_start(workspace: str = ".", session_id: str | None = None) -> str:
+    conn = _workspace_conn(workspace)
+    return create_session(conn, session_id=session_id)
+
+
+def tool_session_history(session_id: str, workspace: str = ".", limit: int = 30) -> list[dict[str, str]]:
+    conn = _workspace_conn(workspace)
+    safe_limit = max(1, min(limit, _MAX_HISTORY_LIMIT))
+    rows = list_messages(conn, session_id=session_id, limit=safe_limit)
+    return [
+        {
+            "message_id": row.message_id,
+            "session_id": row.session_id,
+            "role": row.role,
+            "content": row.content,
+            "timestamp": row.timestamp,
+        }
+        for row in rows
+    ]
+
+
+def tool_agent_turn(
+    message: str,
+    workspace: str = ".",
+    session_id: str | None = None,
+    query_limit: int = 4,
+    history_window: int = 6,
+) -> dict[str, Any]:
+    conn = _workspace_conn(workspace)
+    result = run_agent_turn(
+        conn=conn,
+        workspace=Path(workspace),
+        user_message=message,
+        session_id=session_id,
+        query_limit=query_limit,
+        history_window=history_window,
+    )
+    return {"session_id": result.session_id, "reply": result.reply, "hits": result.hits}
+
+
+def create_mcp_server() -> Any:
+    try:
+        from mcp.server.fastmcp import FastMCP
+    except ImportError as exc:
+        raise RuntimeError(
+            "FastMCP is not installed. Install with: python -m pip install 'kinekt[mcp]'"
+        ) from exc
+
+    mcp = FastMCP("kinekt")
+
+    @mcp.tool()
+    def query_knowledge_base_tool(query: str, workspace: str = ".", limit: int = 5) -> list[dict[str, Any]]:
+        return tool_query_knowledge_base(query=query, workspace=workspace, limit=limit)
+
+    @mcp.tool()
+    def get_git_context_tool(workspace: str = ".") -> str:
+        return tool_get_git_context(workspace=workspace)
+
+    @mcp.tool()
+    def read_workspace_file_tool(file_path: str, workspace: str = ".", max_chars: int = _DEFAULT_READ_CHARS) -> str:
+        return tool_read_workspace_file(file_path=file_path, workspace=workspace, max_chars=max_chars)
+
+    @mcp.tool()
+    def session_start_tool(workspace: str = ".", session_id: str | None = None) -> str:
+        return tool_session_start(workspace=workspace, session_id=session_id)
+
+    @mcp.tool()
+    def session_history_tool(session_id: str, workspace: str = ".", limit: int = 30) -> list[dict[str, str]]:
+        return tool_session_history(session_id=session_id, workspace=workspace, limit=limit)
+
+    @mcp.tool()
+    def agent_turn_tool(
+        message: str,
+        workspace: str = ".",
+        session_id: str | None = None,
+        query_limit: int = 4,
+        history_window: int = 6,
+    ) -> dict[str, Any]:
+        return tool_agent_turn(
+            message=message,
+            workspace=workspace,
+            session_id=session_id,
+            query_limit=query_limit,
+            history_window=history_window,
+        )
+
+    return mcp
+
+
+def run_stdio_server() -> int:
+    server = create_mcp_server()
+    server.run(transport="stdio")
+    return 0
