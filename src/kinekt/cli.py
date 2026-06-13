@@ -4,6 +4,7 @@ import argparse
 from pathlib import Path
 
 from .ingest import ingest_workspace
+from .mcp_server import run_stdio_server
 from .query import query_knowledge_base
 from .storage import connect, ensure_schema
 from .tools import get_git_context, read_workspace_file
@@ -49,6 +50,10 @@ def _cmd_read_file(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_mcp_serve(_args: argparse.Namespace) -> int:
+    return run_stdio_server()
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="kinekt", description="Kinekt local-first context engine")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -74,6 +79,9 @@ def build_parser() -> argparse.ArgumentParser:
     p_read.add_argument("--workspace", default=".")
     p_read.add_argument("--max-chars", type=int, default=4000)
     p_read.set_defaults(func=_cmd_read_file)
+
+    p_mcp = sub.add_parser("mcp-serve", help="Run FastMCP server over stdio")
+    p_mcp.set_defaults(func=_cmd_mcp_serve)
 
     return parser
 

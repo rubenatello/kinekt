@@ -13,6 +13,7 @@ dependencies = []
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0"]
+mcp = ["mcp>=1.10.0"]
 
 [project.scripts]
 kinekt = "kinekt.cli:main"

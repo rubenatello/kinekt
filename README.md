@@ -11,6 +11,7 @@ This repository now includes a working local-first core with:
 - Local SQLite persistence with the design document schema (`sessions`, `thread_messages`, `file_registry`, `developer_profile`)
 - Local chunk storage and deterministic embedding fallback for semantic retrieval
 - CLI commands for ingestion, querying, git context, and safe file reads
+- FastMCP server mode exposing `query_knowledge_base`, `get_git_context`, and `read_workspace_file`
 
 ## Setup
 
@@ -23,6 +24,12 @@ For development (tests):
 ```bash
 python -m pip install -e .[dev]
 python -m pip install pytest
+```
+
+For MCP server support:
+
+```bash
+python -m pip install -e .[mcp]
 ```
 
 ## Usage
@@ -55,6 +62,12 @@ Read a workspace file safely (path traversal protected):
 
 ```bash
 kinekt read-file src/main.py --workspace /path/to/workspace --max-chars 2000
+```
+
+Run FastMCP server over stdio:
+
+```bash
+kinekt mcp-serve
 ```
 
 ## Run tests
