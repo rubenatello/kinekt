@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -69,3 +70,31 @@ def test_tool_agent_turn_and_session_history(tmp_path: Path) -> None:
     assert turn["session_id"] == sid
     assert history
     assert history[0]["role"] == "user"
+
+
+def test_tool_agent_turn_clamps_limits_before_agent_core(tmp_path: Path, monkeypatch) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+
+    conn = connect(workspace / ".kinekt" / "kinekt.sqlite3")
+    ensure_schema(conn)
+
+    captured: dict[str, int] = {}
+
+    def fake_run_agent_turn(**kwargs):
+        captured["query_limit"] = kwargs["query_limit"]
+        captured["history_window"] = kwargs["history_window"]
+        return SimpleNamespace(session_id="sid", reply="ok", hits=[])
+
+    monkeypatch.setattr("kinekt.mcp_server.run_agent_turn", fake_run_agent_turn)
+
+    result = tool_agent_turn(
+        message="hello",
+        workspace=str(workspace),
+        query_limit=999,
+        history_window=999,
+    )
+
+    assert result["session_id"] == "sid"
+    assert captured["query_limit"] == 10
+    assert captured["history_window"] == 20

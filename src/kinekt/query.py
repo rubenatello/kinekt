@@ -5,6 +5,7 @@ import sqlite3
 from dataclasses import dataclass
 
 from .chunking import cosine_similarity, embed_text
+from .limits import clamp_query_limit
 
 
 @dataclass(frozen=True)
@@ -45,9 +46,10 @@ def _query_table(conn: sqlite3.Connection, table: str, query_vec: list[float], l
 
 
 def query_knowledge_base(conn: sqlite3.Connection, text: str, limit: int = 5) -> list[QueryResult]:
+    safe_limit = clamp_query_limit(limit)
     query_vec = embed_text(text)
-    combined = _query_table(conn, "code_chunks", query_vec, limit) + _query_table(
-        conn, "notes_chunks", query_vec, limit
+    combined = _query_table(conn, "code_chunks", query_vec, safe_limit) + _query_table(
+        conn, "notes_chunks", query_vec, safe_limit
     )
     combined.sort(key=lambda x: x.score, reverse=True)
-    return combined[:limit]
+    return combined[:safe_limit]

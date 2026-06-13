@@ -44,6 +44,8 @@ Current test command:
 python -m pytest -q
 ```
 
+A feature or iteration is not complete until it has been tested and verified with no errors.
+
 ## Documentation Expectations
 
 When adding user-facing commands or server modes:

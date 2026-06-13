@@ -1,3 +1,17 @@
+Metadata-Version: 2.4
+Name: kinekt
+Version: 0.1.0
+Summary: Local-first developer context engine
+Author: Kinekt Contributors
+Requires-Python: >=3.11
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Provides-Extra: dev
+Requires-Dist: pytest>=8.0; extra == "dev"
+Provides-Extra: mcp
+Requires-Dist: mcp>=1.10.0; extra == "mcp"
+Dynamic: license-file
+
 # kinekt
 
 Kinekt is a local-first developer context engine designed to eliminate context-switching for software engineers. Developers treat their codebases, git commit logs, and markdown knowledge bases (like Obsidian or Notion exports) as fragmented data silos.
@@ -92,10 +106,6 @@ Inspect session history:
 ```bash
 kinekt session-history <session-id> --workspace /path/to/workspace --limit 30
 ```
-
-`session-history --limit` is clamped to `1..100` for safety.
-
-`agent-turn --query-limit` is clamped to `1..10` and `--history-window` is clamped to `1..20`.
 
 ## Run tests
 
