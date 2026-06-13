@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=69.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "kinekt"
+version = "0.1.0"
+description = "Local-first developer context engine"
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [{ name = "Kinekt Contributors" }]
+dependencies = []
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
+[project.scripts]
+kinekt = "kinekt.cli:main"
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
