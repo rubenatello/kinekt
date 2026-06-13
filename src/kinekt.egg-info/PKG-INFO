@@ -107,6 +107,10 @@ Inspect session history:
 kinekt session-history <session-id> --workspace /path/to/workspace --limit 30
 ```
 
+`session-history --limit` is clamped to `1..100` for safety.
+
+`agent-turn --query-limit` is clamped to `1..10` and `--history-window` is clamped to `1..20`.
+
 ## Run tests
 
 ```bash

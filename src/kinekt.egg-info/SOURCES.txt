@@ -6,6 +6,7 @@ src/kinekt/agent_core.py
 src/kinekt/chunking.py
 src/kinekt/cli.py
 src/kinekt/ingest.py
+src/kinekt/limits.py
 src/kinekt/mcp_server.py
 src/kinekt/query.py
 src/kinekt/schema.py
@@ -19,6 +20,7 @@ src/kinekt.egg-info/entry_points.txt
 src/kinekt.egg-info/requires.txt
 src/kinekt.egg-info/top_level.txt
 tests/test_agent_core.py
+tests/test_cli.py
 tests/test_ingest_query.py
 tests/test_mcp_server.py
 tests/test_tools.py
