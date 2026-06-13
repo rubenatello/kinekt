@@ -21,3 +21,4 @@ src/kinekt.egg-info/top_level.txt
 tests/test_agent_core.py
 tests/test_ingest_query.py
 tests/test_mcp_server.py
+tests/test_tools.py
