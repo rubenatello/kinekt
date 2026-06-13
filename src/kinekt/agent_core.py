@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from pathlib import Path
 import sqlite3
 
+from .generation import generate_agent_reply
 from .limits import clamp_agent_history_window, clamp_agent_query_limit
 from .query import query_knowledge_base
 from .session_store import append_message, create_session, list_messages
@@ -42,22 +43,14 @@ def run_agent_turn(
     history = list_messages(conn, sid, limit=safe_history_window * 2)
     prior_user_count = sum(1 for m in history[:-1] if m.role == "user")
 
-    lines: list[str] = []
-    lines.append(f"Session: {sid}")
-    lines.append(f"Workspace: {_workspace_header(workspace)}")
-    if prior_user_count > 0:
-        lines.append(f"Prior turns in this session: {prior_user_count}")
-
-    if hits:
-        lines.append("Relevant indexed context:")
-        for idx, hit in enumerate(hits, start=1):
-            preview = " ".join(hit.content.split())[:140]
-            lines.append(f"{idx}. {hit.file_path} [{hit.source}] score={hit.score:.3f} :: {preview}")
-    else:
-        lines.append("No indexed context found for this query. Run `kinekt ingest <workspace>`.")
-
-    lines.append("Next: refine the query or ask for specific file-level details.")
-    reply = "\n".join(lines)
+    generation = generate_agent_reply(
+        workspace=_workspace_header(workspace),
+        session_id=sid,
+        user_message=clean_message,
+        hits=hits,
+        prior_user_count=prior_user_count,
+    )
+    reply = f"{generation.text}\n\nGeneration backend: {generation.backend}"
 
     append_message(conn, sid, "assistant", reply)
 

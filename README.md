@@ -51,6 +51,24 @@ Safety behavior:
 - If Ollama is unreachable or returns invalid payloads, Kinekt falls back to deterministic local embeddings.
 - Non-loopback embedding endpoints are rejected to preserve local-first data boundaries.
 
+## Production-oriented local generation options
+
+`agent-turn` defaults to deterministic local generation for offline reliability.
+
+Optional local Ollama text generation is supported by environment variables:
+
+```bash
+export KINEKT_GENERATION_BACKEND=ollama
+export KINEKT_OLLAMA_GENERATE_URL=http://127.0.0.1:11434/api/generate
+export KINEKT_OLLAMA_GENERATE_MODEL=llama3.1:8b
+export KINEKT_OLLAMA_GENERATE_TIMEOUT_SECONDS=20
+```
+
+Safety behavior:
+
+- If Ollama generation is unreachable or returns invalid payloads, Kinekt falls back to deterministic local generation.
+- Non-loopback generation endpoints are rejected to preserve local-first data boundaries.
+
 ## Usage
 
 Initialize local database:
