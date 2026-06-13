@@ -33,6 +33,24 @@ For MCP server support:
 python -m pip install -e .[mcp]
 ```
 
+## Production-oriented local embedding options
+
+Kinekt defaults to deterministic local embeddings (no external service required).
+
+Optional local Ollama embeddings are supported by environment variables:
+
+```bash
+export KINEKT_EMBEDDING_BACKEND=ollama
+export KINEKT_OLLAMA_URL=http://127.0.0.1:11434/api/embeddings
+export KINEKT_OLLAMA_MODEL=nomic-embed-text
+export KINEKT_OLLAMA_TIMEOUT_SECONDS=10
+```
+
+Safety behavior:
+
+- If Ollama is unreachable or returns invalid payloads, Kinekt falls back to deterministic local embeddings.
+- Non-loopback embedding endpoints are rejected to preserve local-first data boundaries.
+
 ## Usage
 
 Initialize local database:
@@ -96,6 +114,29 @@ kinekt session-history <session-id> --workspace /path/to/workspace --limit 30
 `session-history --limit` is clamped to `1..100` for safety.
 
 `agent-turn --query-limit` is clamped to `1..10` and `--history-window` is clamped to `1..20`.
+
+## Docker (optional)
+
+Build image:
+
+```bash
+docker build -t kinekt:local .
+```
+
+Run commands against your local workspace via bind mount:
+
+```bash
+docker run --rm -it \
+  -v /path/to/workspace:/workspace \
+  kinekt:local init /workspace
+```
+
+Example ingest + query:
+
+```bash
+docker run --rm -it -v /path/to/workspace:/workspace kinekt:local ingest /workspace
+docker run --rm -it -v /path/to/workspace:/workspace kinekt:local query "where is context stored?" --workspace /workspace
+```
 
 ## Run tests
 

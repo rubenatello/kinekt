@@ -29,7 +29,14 @@ def _query_table(conn: sqlite3.Connection, table: str, query_vec: list[float], l
 
     scored: list[QueryResult] = []
     for row in rows:
-        emb = json.loads(row["embedding_json"])
+        try:
+            emb = json.loads(row["embedding_json"])
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(emb, list):
+            continue
+        if len(emb) != len(query_vec):
+            continue
         score = cosine_similarity(query_vec, emb)
         scored.append(
             QueryResult(
