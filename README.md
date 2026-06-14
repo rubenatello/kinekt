@@ -97,6 +97,8 @@ Initialize local database:
 kinekt init
 ```
 
+Schema migrations are applied automatically on startup using SQLite `PRAGMA user_version`.
+
 Ingest a workspace:
 
 ```bash
