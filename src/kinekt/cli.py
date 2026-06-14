@@ -4,6 +4,7 @@ import argparse
 from pathlib import Path
 
 from .agent_core import run_agent_turn
+from .diagnostics import doctor_report
 from .ingest import ingest_workspace
 from .limits import (
     clamp_agent_history_window,
@@ -110,6 +111,11 @@ def _cmd_agent_turn(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_doctor(args: argparse.Namespace) -> int:
+    print(doctor_report(Path(args.workspace)))
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="kinekt", description="Kinekt local-first context engine")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -159,6 +165,10 @@ def build_parser() -> argparse.ArgumentParser:
     p_agent_turn.add_argument("--query-limit", type=int, default=4)
     p_agent_turn.add_argument("--history-window", type=int, default=6)
     p_agent_turn.set_defaults(func=_cmd_agent_turn)
+
+    p_doctor = sub.add_parser("doctor", help="Show local runtime diagnostics")
+    p_doctor.add_argument("workspace", nargs="?", default=".")
+    p_doctor.set_defaults(func=_cmd_doctor)
 
     return parser
 

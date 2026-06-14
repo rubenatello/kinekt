@@ -77,3 +77,12 @@ def test_cmd_agent_turn_clamps_limits(monkeypatch) -> None:
     assert rc == 0
     assert seen["query_limit"] == 10
     assert seen["history_window"] == 20
+
+
+def test_cmd_doctor_prints_report(monkeypatch, capsys) -> None:
+    monkeypatch.setattr(cli, "doctor_report", lambda _workspace: "doctor ok")
+    args = argparse.Namespace(workspace=".")
+    rc = cli._cmd_doctor(args)
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "doctor ok" in out

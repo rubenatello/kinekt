@@ -143,6 +143,12 @@ Run a stateful agent turn:
 kinekt agent-turn "how is context stored?" --workspace /path/to/workspace --session-id <session-id>
 ```
 
+Show local runtime diagnostics:
+
+```bash
+kinekt doctor /path/to/workspace
+```
+
 Inspect session history:
 
 ```bash
