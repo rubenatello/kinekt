@@ -33,6 +33,12 @@ For MCP server support:
 python -m pip install -e .[mcp]
 ```
 
+For optional ChromaDB vector backend support:
+
+```bash
+python -m pip install -e .[vector]
+```
+
 ## Production-oriented local embedding options
 
 Kinekt defaults to deterministic local embeddings (no external service required).
@@ -50,6 +56,20 @@ Safety behavior:
 
 - If Ollama is unreachable or returns invalid payloads, Kinekt falls back to deterministic local embeddings.
 - Non-loopback embedding endpoints are rejected to preserve local-first data boundaries.
+
+## Vector store backend options
+
+Kinekt defaults to local SQLite-backed vector storage (`sqlite_local`).
+
+Optional local ChromaDB vector storage:
+
+```bash
+export KINEKT_VECTOR_BACKEND=chromadb
+```
+
+Safety behavior:
+
+- If ChromaDB is unavailable or fails to initialize, Kinekt falls back to local SQLite-backed vector storage.
 
 ## Production-oriented local generation options
 
