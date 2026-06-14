@@ -190,6 +190,13 @@ docker run --rm -it -v /path/to/workspace:/workspace kinekt:local query "where i
 python -m pytest -q
 ```
 
+## CI
+
+GitHub Actions workflows are included for:
+
+- Python test validation (`.github/workflows/ci-tests.yml`)
+- Docker image build + smoke run (`.github/workflows/docker-smoke.yml`)
+
 ## Logging And Error Codes
 
 Kinekt emits structured JSON logs on stderr for CLI and MCP command/tool events.
