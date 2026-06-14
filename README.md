@@ -189,3 +189,11 @@ docker run --rm -it -v /path/to/workspace:/workspace kinekt:local query "where i
 ```bash
 python -m pytest -q
 ```
+
+## Logging And Error Codes
+
+Kinekt emits structured JSON logs on stderr for CLI and MCP command/tool events.
+
+- Set log level with `KINEKT_LOG_LEVEL` (for example `INFO`, `WARNING`, `ERROR`).
+- CLI failures are normalized to JSON error payloads: `{"code": "...", "message": "..."}`.
+- MCP tool failures are normalized with prefixed error codes in tool exceptions (for example `ERR_INVALID_ARGUMENT: ...`).
