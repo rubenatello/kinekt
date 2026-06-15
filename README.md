@@ -2,6 +2,29 @@
 
 Kinekt is a local-first developer context engine designed to eliminate context-switching for software engineers. Developers treat their codebases, git commit logs, and markdown knowledge bases (like Obsidian or Notion exports) as fragmented data silos.
 
+## Problem Kinekt Solves
+
+Kinekt is designed to fix fragmented developer context on a local machine. In practice, relevant context is spread across:
+
+- Source code files and architecture modules
+- Uncommitted git status and branch state
+- Local markdown notes and knowledge bases
+
+Without a unifying layer, developers context-switch heavily between tools and lose time rebuilding mental state. Kinekt solves this by indexing those local sources into a single queryable context engine and exposing it through CLI and MCP tools, while preserving local-first privacy and read-only safety boundaries.
+
+## How The Project Works
+
+Kinekt follows a local pipeline:
+
+1. `kinekt init` creates a workspace-scoped SQLite database under `.kinekt/kinekt.sqlite3` and applies schema migrations.
+2. `kinekt ingest <workspace>` scans code and markdown files, skips unchanged files with content hashes (`file_registry`), and chunks content for retrieval.
+3. Each chunk is embedded locally, then stored in either:
+   - SQLite chunk tables (`code_chunks`, `notes_chunks`) by default, or
+   - ChromaDB when `KINEKT_VECTOR_BACKEND=chromadb` is configured.
+4. `kinekt query "<question>"` embeds the query and returns top semantic matches across indexed code and notes.
+5. Session tools (`session-start`, `session-history`, `agent-turn`) persist conversation state in `sessions` and `thread_messages`.
+6. `kinekt mcp-serve` exposes the same capabilities over FastMCP tools (`query_knowledge_base`, `get_git_context`, `read_workspace_file`, `session_start`, `session_history`, `agent_turn`) for agent integrations.
+
 ## Current implementation (MVP foundation)
 
 This repository now includes a working local-first core with:
