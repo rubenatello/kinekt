@@ -104,14 +104,9 @@ def tool_agent_turn(
     return {"session_id": result.session_id, "reply": result.reply, "hits": result.hits}
 
 
-def _mcp_error_payload(tool_name: str, exc: Exception) -> dict[str, str]:
+def _mcp_error_payload(_tool_name: str, exc: Exception) -> dict[str, str]:
     err = normalize_exception(exc)
-    return {
-        "code": err.code,
-        "message": err.message,
-        "tool": tool_name,
-        "details": exc.__class__.__name__,
-    }
+    return {"code": err.code, "message": err.message}
 
 
 def _run_tool_with_error_contract(tool_name: str, fn, **kwargs):
@@ -127,7 +122,7 @@ def _run_tool_with_error_contract(tool_name: str, fn, **kwargs):
             tool=tool_name,
             code=payload["code"],
             message=payload["message"],
-            details=payload["details"],
+            details=exc.__class__.__name__,
         )
         raise RuntimeError(json.dumps(payload, sort_keys=True)) from exc
 

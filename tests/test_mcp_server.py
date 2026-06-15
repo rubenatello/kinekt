@@ -105,10 +105,7 @@ def test_tool_agent_turn_clamps_limits_before_agent_core(tmp_path: Path, monkeyp
 
 def test_mcp_error_payload_shape() -> None:
     payload = _mcp_error_payload("read_workspace_file", ValueError("bad path"))
-    assert payload["code"] == "ERR_INVALID_ARGUMENT"
-    assert payload["message"] == "bad path"
-    assert payload["tool"] == "read_workspace_file"
-    assert payload["details"] == "ValueError"
+    assert payload == {"code": "ERR_INVALID_ARGUMENT", "message": "bad path"}
 
 
 def test_run_tool_with_error_contract_raises_json_runtime_error() -> None:
@@ -119,7 +116,4 @@ def test_run_tool_with_error_contract_raises_json_runtime_error() -> None:
         _run_tool_with_error_contract("query_knowledge_base", boom)
 
     payload = json.loads(str(exc_info.value))
-    assert payload["code"] == "ERR_INVALID_ARGUMENT"
-    assert payload["message"] == "bad input"
-    assert payload["tool"] == "query_knowledge_base"
-    assert payload["details"] == "ValueError"
+    assert payload == {"code": "ERR_INVALID_ARGUMENT", "message": "bad input"}
