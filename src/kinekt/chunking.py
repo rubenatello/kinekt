@@ -2,12 +2,11 @@ from __future__ import annotations
 
 import ast
 import hashlib
-import math
 import re
 from dataclasses import dataclass
 from pathlib import Path
 
-EMBED_DIM = 256
+from .embeddings import embed_text
 
 
 @dataclass(frozen=True)
@@ -138,25 +137,6 @@ def split_markdown_file(path: Path, rel_path: str) -> list[NoteChunk]:
             flush()
     flush()
     return chunks
-
-
-def embed_text(text: str, dim: int = EMBED_DIM) -> list[float]:
-    # Deterministic local embedding fallback (no network, no external model).
-    vec = [0.0] * dim
-    normalized = " ".join(text.lower().split())
-    if not normalized:
-        return vec
-
-    for token in normalized.split(" "):
-        h = hashlib.sha256(token.encode("utf-8", errors="ignore")).digest()
-        idx = int.from_bytes(h[:2], "big") % dim
-        sign = -1.0 if (h[2] & 1) else 1.0
-        vec[idx] += sign
-
-    norm = math.sqrt(sum(v * v for v in vec))
-    if norm == 0:
-        return vec
-    return [v / norm for v in vec]
 
 
 def cosine_similarity(a: list[float], b: list[float]) -> float:

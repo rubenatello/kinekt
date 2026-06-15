@@ -77,3 +77,19 @@ def test_query_limit_is_clamped(tmp_path: Path) -> None:
 
     results = query_knowledge_base(conn, "local context", limit=500)
     assert len(results) <= 20
+
+
+def test_query_skips_mismatched_embedding_dimensions(tmp_path: Path) -> None:
+    conn = connect(tmp_path / "kinekt.sqlite3")
+    ensure_schema(conn)
+    conn.execute(
+        """
+        INSERT INTO notes_chunks(chunk_id, file_path, tags, heading_context, content, embedding_json)
+        VALUES (?, ?, ?, ?, ?, ?)
+        """,
+        ("bad-dim", "notes.md", "", "root", "bad embedding shape", "[0.1, 0.2, 0.3]"),
+    )
+    conn.commit()
+
+    results = query_knowledge_base(conn, "anything", limit=5)
+    assert results == []

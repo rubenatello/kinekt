@@ -33,6 +33,62 @@ For MCP server support:
 python -m pip install -e .[mcp]
 ```
 
+For optional ChromaDB vector backend support:
+
+```bash
+python -m pip install -e .[vector]
+```
+
+## Production-oriented local embedding options
+
+Kinekt defaults to deterministic local embeddings (no external service required).
+
+Optional local Ollama embeddings are supported by environment variables:
+
+```bash
+export KINEKT_EMBEDDING_BACKEND=ollama
+export KINEKT_OLLAMA_URL=http://127.0.0.1:11434/api/embeddings
+export KINEKT_OLLAMA_MODEL=nomic-embed-text
+export KINEKT_OLLAMA_TIMEOUT_SECONDS=10
+```
+
+Safety behavior:
+
+- If Ollama is unreachable or returns invalid payloads, Kinekt falls back to deterministic local embeddings.
+- Non-loopback embedding endpoints are rejected to preserve local-first data boundaries.
+
+## Vector store backend options
+
+Kinekt defaults to local SQLite-backed vector storage (`sqlite_local`).
+
+Optional local ChromaDB vector storage:
+
+```bash
+export KINEKT_VECTOR_BACKEND=chromadb
+```
+
+Safety behavior:
+
+- If ChromaDB is unavailable or fails to initialize, Kinekt falls back to local SQLite-backed vector storage.
+
+## Production-oriented local generation options
+
+`agent-turn` defaults to deterministic local generation for offline reliability.
+
+Optional local Ollama text generation is supported by environment variables:
+
+```bash
+export KINEKT_GENERATION_BACKEND=ollama
+export KINEKT_OLLAMA_GENERATE_URL=http://127.0.0.1:11434/api/generate
+export KINEKT_OLLAMA_GENERATE_MODEL=llama3.1:8b
+export KINEKT_OLLAMA_GENERATE_TIMEOUT_SECONDS=20
+```
+
+Safety behavior:
+
+- If Ollama generation is unreachable or returns invalid payloads, Kinekt falls back to deterministic local generation.
+- Non-loopback generation endpoints are rejected to preserve local-first data boundaries.
+
 ## Usage
 
 Initialize local database:
@@ -40,6 +96,8 @@ Initialize local database:
 ```bash
 kinekt init
 ```
+
+Schema migrations are applied automatically on startup using SQLite `PRAGMA user_version`.
 
 Ingest a workspace:
 
@@ -87,6 +145,12 @@ Run a stateful agent turn:
 kinekt agent-turn "how is context stored?" --workspace /path/to/workspace --session-id <session-id>
 ```
 
+Show local runtime diagnostics:
+
+```bash
+kinekt doctor /path/to/workspace
+```
+
 Inspect session history:
 
 ```bash
@@ -97,8 +161,46 @@ kinekt session-history <session-id> --workspace /path/to/workspace --limit 30
 
 `agent-turn --query-limit` is clamped to `1..10` and `--history-window` is clamped to `1..20`.
 
+## Docker (optional)
+
+Build image:
+
+```bash
+docker build -t kinekt:local .
+```
+
+Run commands against your local workspace via bind mount:
+
+```bash
+docker run --rm -it \
+  -v /path/to/workspace:/workspace \
+  kinekt:local init /workspace
+```
+
+Example ingest + query:
+
+```bash
+docker run --rm -it -v /path/to/workspace:/workspace kinekt:local ingest /workspace
+docker run --rm -it -v /path/to/workspace:/workspace kinekt:local query "where is context stored?" --workspace /workspace
+```
+
 ## Run tests
 
 ```bash
 python -m pytest -q
 ```
+
+## CI
+
+GitHub Actions workflows are included for:
+
+- Python test validation (`.github/workflows/ci-tests.yml`)
+- Docker image build + smoke run (`.github/workflows/docker-smoke.yml`)
+
+## Logging And Error Codes
+
+Kinekt emits structured JSON logs on stderr for CLI and MCP command/tool events.
+
+- Set log level with `KINEKT_LOG_LEVEL` (for example `INFO`, `WARNING`, `ERROR`).
+- CLI failures are normalized to JSON error payloads: `{"code": "...", "message": "..."}`.
+- MCP tool failures are normalized to JSON payloads with the same contract as CLI failures: `{"code": "...", "message": "..."}`.

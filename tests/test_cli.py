@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 from types import SimpleNamespace
 
 from kinekt import cli
@@ -77,3 +78,26 @@ def test_cmd_agent_turn_clamps_limits(monkeypatch) -> None:
     assert rc == 0
     assert seen["query_limit"] == 10
     assert seen["history_window"] == 20
+
+
+def test_cmd_doctor_prints_report(monkeypatch, capsys) -> None:
+    monkeypatch.setattr(cli, "doctor_report", lambda _workspace: "doctor ok")
+    args = argparse.Namespace(workspace=".")
+    rc = cli._cmd_doctor(args)
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "doctor ok" in out
+
+
+def test_main_normalizes_exceptions(monkeypatch, capsys) -> None:
+    class _Parser:
+        def parse_args(self):
+            return argparse.Namespace(command="query", func=lambda _args: (_ for _ in ()).throw(ValueError("bad input")))
+
+    monkeypatch.setattr(cli, "build_parser", lambda: _Parser())
+    rc = cli.main()
+    assert rc == 1
+    err = capsys.readouterr().err
+    payload = json.loads(err.splitlines()[-1])
+    assert payload["code"] == "ERR_INVALID_ARGUMENT"
+    assert payload["message"] == "bad input"

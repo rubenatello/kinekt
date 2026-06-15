@@ -33,6 +33,7 @@ def test_agent_turn_persists_session_and_messages(tmp_path: Path) -> None:
     assert messages[0].role == "user"
     assert messages[1].role == "assistant"
     assert "Prior turns in this session" in second.reply
+    assert "Generation backend: deterministic" in second.reply
 
 
 def test_session_store_profile_and_role_validation(tmp_path: Path) -> None:

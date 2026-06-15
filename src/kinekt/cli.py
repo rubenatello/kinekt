@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import argparse
+import sys
 from pathlib import Path
 
 from .agent_core import run_agent_turn
+from .diagnostics import doctor_report
+from .errors import format_error_json, normalize_exception
 from .ingest import ingest_workspace
 from .limits import (
     clamp_agent_history_window,
@@ -13,6 +16,7 @@ from .limits import (
     clamp_read_chars,
 )
 from .mcp_server import run_stdio_server
+from .logging_utils import get_logger, log_event
 from .query import query_knowledge_base
 from .session_store import create_session, list_messages
 from .storage import connect, ensure_schema
@@ -110,6 +114,11 @@ def _cmd_agent_turn(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_doctor(args: argparse.Namespace) -> int:
+    print(doctor_report(Path(args.workspace)))
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="kinekt", description="Kinekt local-first context engine")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -160,13 +169,28 @@ def build_parser() -> argparse.ArgumentParser:
     p_agent_turn.add_argument("--history-window", type=int, default=6)
     p_agent_turn.set_defaults(func=_cmd_agent_turn)
 
+    p_doctor = sub.add_parser("doctor", help="Show local runtime diagnostics")
+    p_doctor.add_argument("workspace", nargs="?", default=".")
+    p_doctor.set_defaults(func=_cmd_doctor)
+
     return parser
 
 
 def main() -> int:
     parser = build_parser()
     args = parser.parse_args()
-    return args.func(args)
+    logger = get_logger("kinekt.cli")
+    command = getattr(args, "command", "unknown")
+    log_event(logger, "cli_command_start", command=command)
+    try:
+        rc = args.func(args)
+        log_event(logger, "cli_command_success", command=command, rc=rc)
+        return rc
+    except Exception as exc:
+        err = normalize_exception(exc)
+        log_event(logger, "cli_command_error", command=command, code=err.code, message=err.message)
+        print(format_error_json(exc), file=sys.stderr)
+        return 1
 
 
 if __name__ == "__main__":

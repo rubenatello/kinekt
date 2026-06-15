@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -7,6 +8,8 @@ import pytest
 
 from kinekt.ingest import ingest_workspace
 from kinekt.mcp_server import (
+    _mcp_error_payload,
+    _run_tool_with_error_contract,
     tool_agent_turn,
     tool_query_knowledge_base,
     tool_read_workspace_file,
@@ -98,3 +101,19 @@ def test_tool_agent_turn_clamps_limits_before_agent_core(tmp_path: Path, monkeyp
     assert result["session_id"] == "sid"
     assert captured["query_limit"] == 10
     assert captured["history_window"] == 20
+
+
+def test_mcp_error_payload_shape() -> None:
+    payload = _mcp_error_payload("read_workspace_file", ValueError("bad path"))
+    assert payload == {"code": "ERR_INVALID_ARGUMENT", "message": "bad path"}
+
+
+def test_run_tool_with_error_contract_raises_json_runtime_error() -> None:
+    def boom():
+        raise ValueError("bad input")
+
+    with pytest.raises(RuntimeError) as exc_info:
+        _run_tool_with_error_contract("query_knowledge_base", boom)
+
+    payload = json.loads(str(exc_info.value))
+    assert payload == {"code": "ERR_INVALID_ARGUMENT", "message": "bad input"}
