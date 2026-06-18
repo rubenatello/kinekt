@@ -8,13 +8,18 @@ on:
 
 jobs:
   docker-build:
+    name: Docker Python ${{ matrix.python-version }}
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.14"]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Build Docker image
-        run: docker build -t kinekt:ci .
+        run: docker build --build-arg PYTHON_VERSION=${{ matrix.python-version }} -t kinekt:ci .
 
       - name: Smoke test image
         run: docker run --rm kinekt:ci --help

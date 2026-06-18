@@ -48,6 +48,32 @@ def test_ingest_skips_unchanged_files(tmp_path: Path) -> None:
     assert second.skipped == 1
 
 
+def test_ingest_non_python_code_uses_code_chunks(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    (workspace / "app.ts").write_text("export function greet(name: string) { return `hello ${name}`; }")
+
+    conn = connect(tmp_path / "kinekt.sqlite3")
+    ensure_schema(conn)
+
+    stats = ingest_workspace(conn, workspace)
+
+    assert stats.scanned == 1
+    assert stats.updated == 1
+
+    code_row = conn.execute(
+        "SELECT file_path, language, construct_type FROM code_chunks WHERE file_path = ?",
+        ("app.ts",),
+    ).fetchone()
+    note_row = conn.execute("SELECT file_path FROM notes_chunks WHERE file_path = ?", ("app.ts",)).fetchone()
+    registry_row = conn.execute("SELECT file_type FROM file_registry WHERE file_path = ?", ("app.ts",)).fetchone()
+
+    assert code_row is not None
+    assert dict(code_row) == {"file_path": "app.ts", "language": "ts", "construct_type": "module"}
+    assert note_row is None
+    assert registry_row["file_type"] == "code"
+
+
 def test_ingest_excludes_cache_directories(tmp_path: Path) -> None:
     workspace = tmp_path / "workspace"
     workspace.mkdir()
