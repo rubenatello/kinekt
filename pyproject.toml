@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=69.0"]
+requires = ["setuptools>=77.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -7,12 +7,32 @@ name = "kinekt"
 version = "0.1.0"
 description = "Local-first developer context engine"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.11,<3.15"
 authors = [{ name = "Kinekt Contributors" }]
+license = "MIT"
+keywords = ["developer-tools", "mcp", "local-first", "rag", "sqlite"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Software Development",
+]
 dependencies = []
 
+[project.urls]
+Homepage = "https://github.com/rubenatello/kinekt"
+Repository = "https://github.com/rubenatello/kinekt"
+Documentation = "https://github.com/rubenatello/kinekt#readme"
+
 [project.optional-dependencies]
-dev = ["pytest>=8.0"]
+dev = ["build>=1.2.0", "pytest>=8.0", "twine>=5.0.0"]
 mcp = ["mcp>=1.10.0"]
 vector = ["chromadb>=0.5.0"]
 

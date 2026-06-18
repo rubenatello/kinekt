@@ -43,6 +43,33 @@ def _stable_chunk_id(*parts: str) -> str:
     return h.hexdigest()
 
 
+def _split_code_blocks(path: Path, rel_path: str, language: str) -> list[CodeChunk]:
+    text = path.read_text(encoding="utf-8", errors="ignore")
+    lines = text.splitlines()
+    chunks: list[CodeChunk] = []
+    block = 80
+    for i in range(0, len(lines), block):
+        snippet = "\n".join(lines[i : i + block]).strip()
+        if snippet:
+            chunks.append(
+                CodeChunk(
+                    chunk_id=_stable_chunk_id(rel_path, "module", str(i)),
+                    file_path=rel_path,
+                    language=language,
+                    construct_type="module",
+                    content=snippet,
+                )
+            )
+    return chunks
+
+
+def split_code_file(path: Path, rel_path: str) -> list[CodeChunk]:
+    if path.suffix.lower() == ".py":
+        return split_python_file(path, rel_path)
+    language = path.suffix.lstrip(".").lower() or "text"
+    return _split_code_blocks(path, rel_path, language)
+
+
 def split_python_file(path: Path, rel_path: str) -> list[CodeChunk]:
     text = path.read_text(encoding="utf-8", errors="ignore")
     chunks: list[CodeChunk] = []
@@ -82,23 +109,7 @@ def split_python_file(path: Path, rel_path: str) -> list[CodeChunk]:
     except SyntaxError:
         pass
 
-    if not chunks:
-        lines = text.splitlines()
-        block = 80
-        for i in range(0, len(lines), block):
-            snippet = "\n".join(lines[i : i + block]).strip()
-            if snippet:
-                chunks.append(
-                    CodeChunk(
-                        chunk_id=_stable_chunk_id(rel_path, "module", str(i)),
-                        file_path=rel_path,
-                        language=path.suffix.lstrip(".") or "text",
-                        construct_type="module",
-                        content=snippet,
-                    )
-                )
-
-    return chunks
+    return chunks or _split_code_blocks(path, rel_path, path.suffix.lstrip(".").lower() or "text")
 
 
 def split_markdown_file(path: Path, rel_path: str) -> list[NoteChunk]:

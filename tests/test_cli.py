@@ -2,9 +2,62 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+import subprocess
+import sys
+from pathlib import Path
 from types import SimpleNamespace
 
 from kinekt import cli
+
+
+def _run_cli(args: list[str], cwd: Path) -> subprocess.CompletedProcess[str]:
+    env = os.environ.copy()
+    src_path = Path(__file__).resolve().parents[1] / "src"
+    existing_pythonpath = env.get("PYTHONPATH")
+    env["PYTHONPATH"] = str(src_path) if not existing_pythonpath else f"{src_path}{os.pathsep}{existing_pythonpath}"
+    return subprocess.run(
+        [sys.executable, "-m", "kinekt.cli", *args],
+        cwd=cwd,
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+
+def test_cli_help_smoke(tmp_path: Path) -> None:
+    result = _run_cli(["--help"], tmp_path)
+    assert result.returncode == 0
+    assert "Kinekt local-first context engine" in result.stdout
+    assert "mcp-serve" in result.stdout
+
+
+def test_cli_doctor_smoke(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+
+    result = _run_cli(["doctor", str(workspace)], tmp_path)
+
+    assert result.returncode == 0
+    assert "Kinekt Doctor" in result.stdout
+    assert "Embedding backend: deterministic" in result.stdout
+
+
+def test_cli_init_ingest_query_smoke(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    (workspace / "notes.md").write_text("# Notes\nKinekt keeps local developer context.")
+
+    init_result = _run_cli(["init", str(workspace)], tmp_path)
+    ingest_result = _run_cli(["ingest", str(workspace)], tmp_path)
+    query_result = _run_cli(["query", "developer context", "--workspace", str(workspace)], tmp_path)
+
+    assert init_result.returncode == 0
+    assert "Initialized Kinekt database" in init_result.stdout
+    assert ingest_result.returncode == 0
+    assert "Scanned: 1 | Updated: 1" in ingest_result.stdout
+    assert query_result.returncode == 0
+    assert "notes.md" in query_result.stdout
 
 
 def test_cmd_query_clamps_limit(monkeypatch) -> None:

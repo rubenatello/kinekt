@@ -4,7 +4,7 @@ import sqlite3
 from dataclasses import dataclass
 from pathlib import Path
 
-from .chunking import file_hash, split_markdown_file, split_python_file
+from .chunking import file_hash, split_code_file, split_markdown_file
 from .vector_store import get_vector_store
 
 CODE_EXTENSIONS = {".py", ".js", ".ts", ".tsx", ".jsx", ".go", ".rs", ".java", ".c", ".cpp"}
@@ -75,13 +75,8 @@ def ingest_workspace(conn: sqlite3.Connection, workspace: Path) -> IngestStats:
             continue
 
         if file_type == "code":
-            chunks = split_python_file(path, rel_path) if ext == ".py" else []
-            if not chunks:
-                # Fallback: treat non-python code as markdown-like blocks.
-                chunks = split_markdown_file(path, rel_path)
-                vector_store.replace_note_chunks(conn, rel_path, chunks)
-            else:
-                vector_store.replace_code_chunks(conn, rel_path, chunks)
+            chunks = split_code_file(path, rel_path)
+            vector_store.replace_code_chunks(conn, rel_path, chunks)
         else:
             chunks = split_markdown_file(path, rel_path)
             vector_store.replace_note_chunks(conn, rel_path, chunks)
