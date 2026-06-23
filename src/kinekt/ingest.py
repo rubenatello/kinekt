@@ -9,7 +9,33 @@ from .vector_store import get_vector_store
 
 CODE_EXTENSIONS = {".py", ".js", ".ts", ".tsx", ".jsx", ".go", ".rs", ".java", ".c", ".cpp"}
 MARKDOWN_EXTENSIONS = {".md", ".markdown", ".mdx"}
-EXCLUDED_DIR_NAMES = {".git", ".kinekt", ".pytest_cache", "__pycache__", ".venv", "venv", ".mypy_cache"}
+EXCLUDED_DIR_NAMES = {
+    ".cache",
+    ".git",
+    ".gradle",
+    ".kinekt",
+    ".mypy_cache",
+    ".next",
+    ".nuxt",
+    ".parcel-cache",
+    ".pytest_cache",
+    ".ruff_cache",
+    ".svelte-kit",
+    ".tox",
+    ".turbo",
+    ".venv",
+    ".vite",
+    "__pycache__",
+    "bower_components",
+    "build",
+    "coverage",
+    "dist",
+    "node_modules",
+    "out",
+    "target",
+    "venv",
+}
+MAX_INDEXED_FILE_BYTES = 1_000_000
 
 
 @dataclass(frozen=True)
@@ -67,6 +93,15 @@ def ingest_workspace(conn: sqlite3.Connection, workspace: Path) -> IngestStats:
             continue
 
         scanned += 1
+        try:
+            file_size = path.stat().st_size
+        except OSError:
+            skipped += 1
+            continue
+        if file_size > MAX_INDEXED_FILE_BYTES:
+            skipped += 1
+            continue
+
         rel_path = str(path.relative_to(workspace))
         digest = file_hash(path)
         existing = _lookup_hash(conn, rel_path)

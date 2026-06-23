@@ -110,7 +110,9 @@ Connect your MCP client to that command. See [MCP client setup](docs/mcp-clients
 For more detail on agent integration and where data is stored, see:
 
 - [Agent connections](docs/agent-connections.md)
+- [Game-changer roadmap](docs/gamechanger-roadmap.md)
 - [Storage, hosting, and sync](docs/storage-and-sync.md)
+- [Test Kinekt on another project](docs/test-another-project.md)
 
 ## CLI Usage
 

@@ -90,6 +90,73 @@ def test_ingest_excludes_cache_directories(tmp_path: Path) -> None:
     assert stats.updated == 1
 
 
+def test_ingest_excludes_dependency_and_build_directories(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    for dirname in ("node_modules", "dist", "build"):
+        nested = workspace / dirname
+        nested.mkdir()
+        (nested / "generated.ts").write_text("export const ignored = true")
+    (workspace / "app.ts").write_text("export const real = true")
+
+    conn = connect(tmp_path / "kinekt.sqlite3")
+    ensure_schema(conn)
+
+    stats = ingest_workspace(conn, workspace)
+
+    assert stats.scanned == 1
+    assert stats.updated == 1
+    row = conn.execute("SELECT file_path FROM code_chunks").fetchone()
+    assert row is not None
+    assert row["file_path"] == "app.ts"
+
+
+def test_ingest_skips_large_text_files(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    (workspace / "large.md").write_text("x" * 1_000_001)
+
+    conn = connect(tmp_path / "kinekt.sqlite3")
+    ensure_schema(conn)
+
+    stats = ingest_workspace(conn, workspace)
+
+    assert stats.scanned == 1
+    assert stats.updated == 0
+    assert stats.skipped == 1
+
+
+def test_ingest_strips_utf8_bom_from_indexed_content(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    (workspace / "notes.md").write_text("\ufeff# Heading\nBOM content", encoding="utf-8")
+
+    conn = connect(tmp_path / "kinekt.sqlite3")
+    ensure_schema(conn)
+
+    ingest_workspace(conn, workspace)
+
+    row = conn.execute("SELECT content FROM notes_chunks WHERE file_path = ?", ("notes.md",)).fetchone()
+    assert row is not None
+    assert not row["content"].startswith("\ufeff")
+
+
+def test_ingest_handles_repeated_markdown_sections(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    (workspace / "notes.md").write_text("# Repeat\nsame content\n# Repeat\nsame content")
+
+    conn = connect(tmp_path / "kinekt.sqlite3")
+    ensure_schema(conn)
+
+    stats = ingest_workspace(conn, workspace)
+
+    rows = conn.execute("SELECT chunk_id, content FROM notes_chunks WHERE file_path = ?", ("notes.md",)).fetchall()
+    assert stats.updated == 1
+    assert len(rows) == 2
+    assert len({row["chunk_id"] for row in rows}) == 2
+
+
 def test_query_limit_is_clamped(tmp_path: Path) -> None:
     workspace = tmp_path / "workspace"
     workspace.mkdir()

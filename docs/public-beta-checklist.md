@@ -8,6 +8,7 @@ Kinekt is ready for public beta when this checklist is complete.
 - MCP client docs include Claude Desktop, Codex, Gemini CLI, and Ollama-wrapper guidance.
 - `kinekt doctor` gives actionable setup guidance without mutating the user's machine.
 - The CLI works from a clean wheel install.
+- Kinekt has been smoke-tested against at least one real non-Kinekt repository.
 
 ## Compatibility
 
@@ -31,9 +32,11 @@ Kinekt is ready for public beta when this checklist is complete.
 - `python scripts/test_python_versions.py` passes for installed local interpreters.
 - Built wheel installs into a clean virtual environment.
 - `kinekt --help` works from the installed wheel.
+- `python scripts/smoke_workspace.py <path-to-project>` passes for a real local project.
 
 ## Launch Notes
 
 - Public beta means useful, safe, and documented, not enterprise-stable.
 - Hosted sync is not included in public beta.
 - Users own local data under `.kinekt/`.
+- The roadmap from beta to stronger agentic-development value is tracked in [Game-Changer Roadmap](gamechanger-roadmap.md).

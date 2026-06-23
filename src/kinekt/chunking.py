@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .embeddings import embed_text
+from .text_files import read_utf8_text
 
 
 @dataclass(frozen=True)
@@ -44,7 +45,7 @@ def _stable_chunk_id(*parts: str) -> str:
 
 
 def _split_code_blocks(path: Path, rel_path: str, language: str) -> list[CodeChunk]:
-    text = path.read_text(encoding="utf-8", errors="ignore")
+    text = read_utf8_text(path)
     lines = text.splitlines()
     chunks: list[CodeChunk] = []
     block = 80
@@ -71,7 +72,7 @@ def split_code_file(path: Path, rel_path: str) -> list[CodeChunk]:
 
 
 def split_python_file(path: Path, rel_path: str) -> list[CodeChunk]:
-    text = path.read_text(encoding="utf-8", errors="ignore")
+    text = read_utf8_text(path)
     chunks: list[CodeChunk] = []
 
     try:
@@ -113,15 +114,16 @@ def split_python_file(path: Path, rel_path: str) -> list[CodeChunk]:
 
 
 def split_markdown_file(path: Path, rel_path: str) -> list[NoteChunk]:
-    text = path.read_text(encoding="utf-8", errors="ignore")
+    text = read_utf8_text(path)
     lines = text.splitlines()
 
     heading = "root"
     buf: list[str] = []
     chunks: list[NoteChunk] = []
+    chunk_index = 0
 
     def flush() -> None:
-        nonlocal buf
+        nonlocal buf, chunk_index
         content = "\n".join(buf).strip()
         if not content:
             buf = []
@@ -129,13 +131,14 @@ def split_markdown_file(path: Path, rel_path: str) -> list[NoteChunk]:
         tags = sorted(set(re.findall(r"#[A-Za-z0-9_-]+", content)))
         chunks.append(
             NoteChunk(
-                chunk_id=_stable_chunk_id(rel_path, heading, content[:120]),
+                chunk_id=_stable_chunk_id(rel_path, heading, str(chunk_index), content[:120]),
                 file_path=rel_path,
                 tags=",".join(tags),
                 heading_context=heading,
                 content=content,
             )
         )
+        chunk_index += 1
         buf = []
 
     for line in lines:

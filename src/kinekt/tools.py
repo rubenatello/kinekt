@@ -4,6 +4,7 @@ import subprocess
 from pathlib import Path
 
 from .limits import clamp_read_chars
+from .text_files import read_utf8_text
 
 
 def get_git_context(repo_path: Path) -> str:
@@ -26,4 +27,4 @@ def read_workspace_file(workspace: Path, file_path: str, max_chars: int = 4000) 
     if workspace not in target.parents and target != workspace:
         raise ValueError("Requested path is outside workspace")
     safe_max_chars = clamp_read_chars(max_chars)
-    return target.read_text(encoding="utf-8", errors="ignore")[:safe_max_chars]
+    return read_utf8_text(target)[:safe_max_chars]

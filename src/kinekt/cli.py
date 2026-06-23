@@ -176,7 +176,14 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _configure_stdio() -> None:
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(errors="replace")
+
+
 def main() -> int:
+    _configure_stdio()
     parser = build_parser()
     args = parser.parse_args()
     logger = get_logger("kinekt.cli")

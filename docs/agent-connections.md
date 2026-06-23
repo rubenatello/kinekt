@@ -56,3 +56,5 @@ Users should be able to:
 6. Add `kinekt mcp-serve` to their agent client.
 
 If any step fails, Kinekt should return a clear error or diagnostic next step.
+
+For a practical end-to-end validation flow against a real repository, see [Test Kinekt On Another Project](test-another-project.md).
