@@ -179,7 +179,10 @@ def build_parser() -> argparse.ArgumentParser:
 def _configure_stdio() -> None:
     for stream in (sys.stdout, sys.stderr):
         if hasattr(stream, "reconfigure"):
-            stream.reconfigure(errors="replace")
+            try:
+                stream.reconfigure(encoding="utf-8", errors="replace")
+            except (TypeError, ValueError, OSError):
+                stream.reconfigure(errors="replace")
 
 
 def main() -> int:

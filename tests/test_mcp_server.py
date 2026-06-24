@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import sys
+import types
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -10,6 +12,7 @@ from kinekt.ingest import ingest_workspace
 from kinekt.mcp_server import (
     _mcp_error_payload,
     _run_tool_with_error_contract,
+    create_mcp_server,
     tool_agent_turn,
     tool_query_knowledge_base,
     tool_read_workspace_file,
@@ -117,3 +120,37 @@ def test_run_tool_with_error_contract_raises_json_runtime_error() -> None:
 
     payload = json.loads(str(exc_info.value))
     assert payload == {"code": "ERR_INVALID_ARGUMENT", "message": "bad input"}
+
+
+def test_create_mcp_server_registers_documented_tool_names(monkeypatch) -> None:
+    registered: list[str] = []
+
+    class FakeFastMCP:
+        def __init__(self, _name: str) -> None:
+            pass
+
+        def tool(self):
+            def decorator(fn):
+                registered.append(fn.__name__)
+                return fn
+
+            return decorator
+
+    mcp_module = types.ModuleType("mcp")
+    server_module = types.ModuleType("mcp.server")
+    fastmcp_module = types.ModuleType("mcp.server.fastmcp")
+    fastmcp_module.FastMCP = FakeFastMCP
+    monkeypatch.setitem(sys.modules, "mcp", mcp_module)
+    monkeypatch.setitem(sys.modules, "mcp.server", server_module)
+    monkeypatch.setitem(sys.modules, "mcp.server.fastmcp", fastmcp_module)
+
+    create_mcp_server()
+
+    assert registered == [
+        "query_knowledge_base",
+        "get_git_context",
+        "read_workspace_file",
+        "session_start",
+        "session_history",
+        "agent_turn",
+    ]

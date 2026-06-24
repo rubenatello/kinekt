@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import fnmatch
+import os
 import sqlite3
 from dataclasses import dataclass
 from pathlib import Path
@@ -11,6 +13,7 @@ CODE_EXTENSIONS = {".py", ".js", ".ts", ".tsx", ".jsx", ".go", ".rs", ".java", "
 MARKDOWN_EXTENSIONS = {".md", ".markdown", ".mdx"}
 EXCLUDED_DIR_NAMES = {
     ".cache",
+    ".firebase",
     ".git",
     ".gradle",
     ".kinekt",
@@ -32,6 +35,7 @@ EXCLUDED_DIR_NAMES = {
     "dist",
     "node_modules",
     "out",
+    "playwright-report",
     "target",
     "venv",
 }
@@ -43,6 +47,91 @@ class IngestStats:
     scanned: int
     updated: int
     skipped: int
+
+
+@dataclass(frozen=True)
+class IgnoreRule:
+    pattern: str
+    negated: bool
+    directory_only: bool
+    anchored: bool
+
+
+def _load_gitignore_rules(workspace: Path) -> list[IgnoreRule]:
+    gitignore = workspace / ".gitignore"
+    if not gitignore.exists():
+        return []
+
+    rules: list[IgnoreRule] = []
+    for raw_line in gitignore.read_text(encoding="utf-8-sig", errors="ignore").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        negated = line.startswith("!")
+        if negated:
+            line = line[1:].strip()
+        if not line:
+            continue
+        directory_only = line.endswith("/")
+        anchored = line.startswith("/")
+        pattern = line.strip("/")
+        if pattern.endswith("/**"):
+            pattern = pattern[:-3].rstrip("/")
+            directory_only = True
+        if pattern:
+            rules.append(
+                IgnoreRule(
+                    pattern=pattern.replace("\\", "/"),
+                    negated=negated,
+                    directory_only=directory_only,
+                    anchored=anchored,
+                )
+            )
+    return rules
+
+
+def _rule_matches(rule: IgnoreRule, rel_path: str, is_dir: bool) -> bool:
+    if rule.directory_only and not is_dir:
+        path_parts = rel_path.split("/")
+        if rule.anchored:
+            return rel_path == rule.pattern or rel_path.startswith(f"{rule.pattern}/")
+        return rule.pattern in path_parts
+
+    if "/" in rule.pattern or rule.anchored:
+        return fnmatch.fnmatch(rel_path, rule.pattern)
+
+    return fnmatch.fnmatch(rel_path.rsplit("/", 1)[-1], rule.pattern)
+
+
+def _is_gitignored(rel_path: str, is_dir: bool, rules: list[IgnoreRule]) -> bool:
+    ignored = False
+    for rule in rules:
+        if _rule_matches(rule, rel_path, is_dir=is_dir):
+            ignored = not rule.negated
+    return ignored
+
+
+def _iter_candidate_files(workspace: Path, rules: list[IgnoreRule]):
+    workspace = workspace.resolve()
+    for root, dirnames, filenames in os.walk(workspace):
+        root_path = Path(root)
+        kept_dirs: list[str] = []
+        for dirname in dirnames:
+            dir_path = root_path / dirname
+            rel_dir = dir_path.relative_to(workspace).as_posix()
+            if dirname.lower() in EXCLUDED_DIR_NAMES:
+                continue
+            if _is_gitignored(rel_dir, is_dir=True, rules=rules):
+                continue
+            kept_dirs.append(dirname)
+        dirnames[:] = kept_dirs
+
+        for filename in filenames:
+            path = root_path / filename
+            rel_file = path.relative_to(workspace).as_posix()
+            if _is_gitignored(rel_file, is_dir=False, rules=rules):
+                continue
+            yield path
 
 
 def _upsert_registry(conn: sqlite3.Connection, rel_path: str, file_type: str, digest: str) -> None:
@@ -71,17 +160,13 @@ def _lookup_hash(conn: sqlite3.Connection, rel_path: str) -> str | None:
 def ingest_workspace(conn: sqlite3.Connection, workspace: Path) -> IngestStats:
     workspace = workspace.resolve()
     vector_store = get_vector_store(conn)
+    gitignore_rules = _load_gitignore_rules(workspace)
 
     scanned = 0
     updated = 0
     skipped = 0
 
-    for path in workspace.rglob("*"):
-        if not path.is_file():
-            continue
-        if any(part in EXCLUDED_DIR_NAMES for part in path.parts):
-            continue
-
+    for path in _iter_candidate_files(workspace, gitignore_rules):
         ext = path.suffix.lower()
         file_type: str | None = None
         if ext in CODE_EXTENSIONS:

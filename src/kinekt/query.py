@@ -21,7 +21,7 @@ def query_knowledge_base(conn: sqlite3.Connection, text: str, limit: int = 5) ->
     safe_limit = clamp_query_limit(limit)
     query_vec = embed_text(text)
     store = get_vector_store(conn)
-    rows = store.query(conn, query_vec=query_vec, limit=safe_limit)
+    rows = store.query(conn, query_vec=query_vec, query_text=text, limit=safe_limit)
     return [
         QueryResult(
             chunk_id=str(row["chunk_id"]),

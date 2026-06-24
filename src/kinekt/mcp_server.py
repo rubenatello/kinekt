@@ -13,7 +13,7 @@ from .limits import (
     clamp_query_limit,
     clamp_read_chars,
 )
-from .query import query_knowledge_base
+from .query import query_knowledge_base as run_query_knowledge_base
 from .session_store import create_session, list_messages
 from .storage import connect, ensure_schema
 from .tools import get_git_context, read_workspace_file
@@ -36,7 +36,7 @@ def _workspace_conn(workspace: str):
 def tool_query_knowledge_base(query: str, workspace: str = ".", limit: int = 5) -> list[dict[str, Any]]:
     safe_limit = clamp_query_limit(limit)
     conn = _workspace_conn(workspace)
-    rows = query_knowledge_base(conn, query, limit=safe_limit)
+    rows = run_query_knowledge_base(conn, query, limit=safe_limit)
     return [
         {
             "chunk_id": row.chunk_id,
@@ -138,7 +138,7 @@ def create_mcp_server() -> Any:
     mcp = FastMCP("kinekt")
 
     @mcp.tool()
-    def query_knowledge_base_tool(query: str, workspace: str = ".", limit: int = 5) -> list[dict[str, Any]]:
+    def query_knowledge_base(query: str, workspace: str = ".", limit: int = 5) -> list[dict[str, Any]]:
         return _run_tool_with_error_contract(
             "query_knowledge_base",
             tool_query_knowledge_base,
@@ -148,11 +148,11 @@ def create_mcp_server() -> Any:
         )
 
     @mcp.tool()
-    def get_git_context_tool(workspace: str = ".") -> str:
+    def get_git_context(workspace: str = ".") -> str:
         return _run_tool_with_error_contract("get_git_context", tool_get_git_context, workspace=workspace)
 
     @mcp.tool()
-    def read_workspace_file_tool(file_path: str, workspace: str = ".", max_chars: int = _DEFAULT_READ_CHARS) -> str:
+    def read_workspace_file(file_path: str, workspace: str = ".", max_chars: int = _DEFAULT_READ_CHARS) -> str:
         return _run_tool_with_error_contract(
             "read_workspace_file",
             tool_read_workspace_file,
@@ -162,11 +162,11 @@ def create_mcp_server() -> Any:
         )
 
     @mcp.tool()
-    def session_start_tool(workspace: str = ".", session_id: str | None = None) -> str:
+    def session_start(workspace: str = ".", session_id: str | None = None) -> str:
         return _run_tool_with_error_contract("session_start", tool_session_start, workspace=workspace, session_id=session_id)
 
     @mcp.tool()
-    def session_history_tool(session_id: str, workspace: str = ".", limit: int = 30) -> list[dict[str, str]]:
+    def session_history(session_id: str, workspace: str = ".", limit: int = 30) -> list[dict[str, str]]:
         return _run_tool_with_error_contract(
             "session_history",
             tool_session_history,
@@ -176,7 +176,7 @@ def create_mcp_server() -> Any:
         )
 
     @mcp.tool()
-    def agent_turn_tool(
+    def agent_turn(
         message: str,
         workspace: str = ".",
         session_id: str | None = None,

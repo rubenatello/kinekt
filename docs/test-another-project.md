@@ -137,7 +137,7 @@ Kinekt is working well if:
 
 ## 7. If Ingest Feels Slow
 
-Kinekt skips common generated and dependency directories such as `node_modules/`, `dist/`, `build/`, `.next/`, `.venv/`, and cache folders. It also skips individual text files over 1 MB.
+Kinekt skips common generated and dependency directories such as `node_modules/`, `dist/`, `build/`, `.firebase/`, `.next/`, `.venv/`, and cache folders. It also applies common root `.gitignore` patterns and skips individual text files over 1 MB.
 
 If a real project still ingests too slowly, record the folder structure and file types involved. That is a signal Kinekt needs a better default exclude rule or a user-configurable ignore file.
 

@@ -93,7 +93,7 @@ def test_ingest_excludes_cache_directories(tmp_path: Path) -> None:
 def test_ingest_excludes_dependency_and_build_directories(tmp_path: Path) -> None:
     workspace = tmp_path / "workspace"
     workspace.mkdir()
-    for dirname in ("node_modules", "dist", "build"):
+    for dirname in ("node_modules", "dist", "build", ".firebase"):
         nested = workspace / dirname
         nested.mkdir()
         (nested / "generated.ts").write_text("export const ignored = true")
@@ -109,6 +109,26 @@ def test_ingest_excludes_dependency_and_build_directories(tmp_path: Path) -> Non
     row = conn.execute("SELECT file_path FROM code_chunks").fetchone()
     assert row is not None
     assert row["file_path"] == "app.ts"
+
+
+def test_ingest_respects_root_gitignore_patterns(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    (workspace / ".gitignore").write_text("ignored-docs/\n*.generated.ts\n")
+    (workspace / "ignored-docs").mkdir()
+    (workspace / "ignored-docs" / "notes.md").write_text("# Ignored\nshould not index")
+    (workspace / "component.generated.ts").write_text("export const ignored = true")
+    (workspace / "app.ts").write_text("export const real = true")
+
+    conn = connect(tmp_path / "kinekt.sqlite3")
+    ensure_schema(conn)
+
+    stats = ingest_workspace(conn, workspace)
+
+    rows = conn.execute("SELECT file_path FROM code_chunks").fetchall()
+    assert stats.scanned == 1
+    assert stats.updated == 1
+    assert [row["file_path"] for row in rows] == ["app.ts"]
 
 
 def test_ingest_skips_large_text_files(tmp_path: Path) -> None:
@@ -170,6 +190,22 @@ def test_query_limit_is_clamped(tmp_path: Path) -> None:
 
     results = query_knowledge_base(conn, "local context", limit=500)
     assert len(results) <= 20
+
+
+def test_query_can_rank_file_path_matches(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    (workspace / "App.tsx").write_text("export function RootShell() { return null }")
+    (workspace / "Other.tsx").write_text("export function SearchResult() { return null }")
+
+    conn = connect(tmp_path / "kinekt.sqlite3")
+    ensure_schema(conn)
+    ingest_workspace(conn, workspace)
+
+    results = query_knowledge_base(conn, "App.tsx", limit=2)
+
+    assert results
+    assert results[0].file_path == "App.tsx"
 
 
 def test_query_skips_mismatched_embedding_dimensions(tmp_path: Path) -> None:

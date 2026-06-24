@@ -48,6 +48,9 @@ Recommended position:
 - Workspace file reads block path traversal.
 - User-controlled limits are clamped.
 - Ollama endpoints are restricted to loopback.
+- Ingest prunes common generated, dependency, build, and cache folders before walking them.
+- Ingest respects root `.gitignore` patterns for common local-project workflows.
+- Query ranking includes path and lexical signals in addition to vector similarity.
 - Package build and wheel install smoke tests exist.
 - Public-beta docs explain install, storage, agent connections, security, and contribution expectations.
 
@@ -66,7 +69,7 @@ Recommended position:
 - Retrieval quality is MVP-level.
 - Python gets AST-aware function/class chunks, but other languages use fixed-size module blocks.
 - Markdown chunking is simple heading/block logic.
-- There is no reranking, hybrid keyword/vector search, or symbol graph.
+- Hybrid path/content scoring exists, but there is no symbol graph or learned reranker.
 - There is no evaluation dataset to measure whether results are actually useful for coding tasks.
 
 ### Agent Integration
@@ -74,6 +77,26 @@ Recommended position:
 - MCP tools work at the interface level, but live validation with real clients still needs to be recorded.
 - The MCP server accepts a `workspace` argument from the client. There is no configured workspace allowlist yet.
 - Kinekt has a local `agent-turn`, but it is not a full coding agent and should not be marketed as one.
+
+## External Repo Test Findings
+
+A Claude-based test against another repository found that the public beta needs to optimize for real-world project friction, not only toy workspaces.
+
+Findings converted into product requirements:
+
+- Ingest must avoid generated/vendor trees by default.
+- Ingest should honor project ignore rules where practical.
+- Windows CLI output must not require users to set `PYTHONIOENCODING`.
+- Search must understand paths and filenames, not only chunk text.
+- MCP tool names in clients must match the public docs exactly.
+
+Current implementation status:
+
+- Default generated/vendor excludes are implemented for common folders such as `node_modules/`, `dist/`, `build/`, `.firebase/`, `.next/`, `.venv/`, and cache directories.
+- Root `.gitignore` support is implemented for common file and directory patterns.
+- CLI stdout/stderr are configured for UTF-8 with replacement fallback.
+- Query scoring includes vector similarity plus path/content lexical boosts.
+- FastMCP registers the documented tool names directly: `query_knowledge_base`, `get_git_context`, `read_workspace_file`, `session_start`, `session_history`, and `agent_turn`.
 
 ### Security And Trust
 
