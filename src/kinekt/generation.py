@@ -13,6 +13,7 @@ _DEFAULT_OLLAMA_URL = "http://127.0.0.1:11434/api/generate"
 _DEFAULT_OLLAMA_MODEL = "llama3.1:8b"
 _DEFAULT_TIMEOUT_SECONDS = 20
 _LOCAL_HOSTS = {"127.0.0.1", "localhost", "::1"}
+_MAX_OLLAMA_RESPONSE_BYTES = 1_000_000
 
 
 @dataclass(frozen=True)
@@ -36,18 +37,31 @@ def _deterministic_reply(
     user_message: str,
     hits: list[QueryResult],
     prior_user_count: int,
+    prior_messages: list[tuple[str, str]],
+    conversation_summary: str | None,
 ) -> str:
     lines: list[str] = []
     lines.append(f"Session: {session_id}")
     lines.append(f"Workspace: {workspace}")
     if prior_user_count > 0:
         lines.append(f"Prior turns in this session: {prior_user_count}")
+    if conversation_summary:
+        lines.append("Earlier conversation summary:")
+        lines.append(conversation_summary)
+    if prior_messages:
+        lines.append("Recent conversation:")
+        for role, content in prior_messages[-6:]:
+            preview = " ".join(content.split())[:160]
+            lines.append(f"- {role}: {preview}")
 
     if hits:
         lines.append("Relevant indexed context:")
         for idx, hit in enumerate(hits, start=1):
             preview = " ".join(hit.content.split())[:140]
-            lines.append(f"{idx}. {hit.file_path} [{hit.source}] score={hit.score:.3f} :: {preview}")
+            lines.append(
+                f"{idx}. {hit.file_path}:{hit.start_line}-{hit.end_line} "
+                f"[{hit.source}] score={hit.score:.3f} :: {preview}"
+            )
     else:
         lines.append("No indexed context found for this query. Run `kinekt ingest <workspace>`.")
 
@@ -65,16 +79,27 @@ def _ollama_reply(
     user_message: str,
     hits: list[QueryResult],
     prior_user_count: int,
+    prior_messages: list[tuple[str, str]],
+    conversation_summary: str | None,
 ) -> str:
     context_lines: list[str] = []
     context_lines.append(f"Session ID: {session_id}")
     context_lines.append(f"Workspace: {workspace}")
     context_lines.append(f"Prior turns: {prior_user_count}")
+    context_lines.append("Earlier conversation summary:")
+    context_lines.append(conversation_summary or "none")
+    context_lines.append("Recent conversation:")
+    if prior_messages:
+        for role, content in prior_messages[-6:]:
+            context_lines.append(f"{role}: {content[:500]}")
+    else:
+        context_lines.append("none")
     context_lines.append("Indexed context hits:")
     if hits:
         for idx, hit in enumerate(hits, start=1):
             context_lines.append(
-                f"{idx}. path={hit.file_path} source={hit.source} score={hit.score:.3f} content={hit.content[:500]}"
+                f"{idx}. path={hit.file_path} lines={hit.start_line}-{hit.end_line} "
+                f"source={hit.source} score={hit.score:.3f} content={hit.content[:500]}"
             )
     else:
         context_lines.append("none")
@@ -91,7 +116,9 @@ def _ollama_reply(
     payload = json.dumps({"model": model, "prompt": prompt, "stream": False}).encode("utf-8")
     req = Request(endpoint, data=payload, headers={"Content-Type": "application/json"}, method="POST")
     with urlopen(req, timeout=timeout_seconds) as resp:
-        body = resp.read()
+        body = resp.read(_MAX_OLLAMA_RESPONSE_BYTES + 1)
+    if len(body) > _MAX_OLLAMA_RESPONSE_BYTES:
+        raise ValueError("Ollama generation response exceeded the maximum size")
     decoded = json.loads(body.decode("utf-8"))
     response = decoded.get("response")
     if not isinstance(response, str) or not response.strip():
@@ -105,7 +132,10 @@ def generate_agent_reply(
     user_message: str,
     hits: list[QueryResult],
     prior_user_count: int,
+    prior_messages: list[tuple[str, str]] | None = None,
+    conversation_summary: str | None = None,
 ) -> GenerationResult:
+    bounded_prior_messages = (prior_messages or [])[-20:]
     backend = os.getenv("KINEKT_GENERATION_BACKEND", "deterministic").strip().lower()
     if backend != "ollama":
         return GenerationResult(
@@ -115,6 +145,8 @@ def generate_agent_reply(
                 user_message=user_message,
                 hits=hits,
                 prior_user_count=prior_user_count,
+                prior_messages=bounded_prior_messages,
+                conversation_summary=conversation_summary,
             ),
             backend="deterministic",
         )
@@ -135,6 +167,8 @@ def generate_agent_reply(
                 user_message=user_message,
                 hits=hits,
                 prior_user_count=prior_user_count,
+                prior_messages=bounded_prior_messages,
+                conversation_summary=conversation_summary,
             ),
             backend="deterministic",
         )
@@ -149,6 +183,8 @@ def generate_agent_reply(
             user_message=user_message,
             hits=hits,
             prior_user_count=prior_user_count,
+            prior_messages=bounded_prior_messages,
+            conversation_summary=conversation_summary,
         )
         return GenerationResult(text=text, backend="ollama")
     except (OSError, URLError, TimeoutError, ValueError, json.JSONDecodeError):
@@ -159,6 +195,8 @@ def generate_agent_reply(
                 user_message=user_message,
                 hits=hits,
                 prior_user_count=prior_user_count,
+                prior_messages=bounded_prior_messages,
+                conversation_summary=conversation_summary,
             ),
             backend="deterministic",
         )

@@ -1,0 +1,63 @@
+name: Release Artifacts
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+  id-token: write
+  attestations: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.11.30"
+
+      - name: Install locked release tooling
+        run: uv sync --locked --python 3.11 --extra dev
+
+      - name: Build distributions
+        run: uv run --locked python -m build --sdist --wheel --outdir dist
+
+      - name: Validate distributions
+        run: uv run --locked python -m twine check dist/*
+
+      - name: Generate runtime SBOM
+        run: >-
+          uv export --locked --preview-features sbom-export
+          --no-dev --extra mcp --no-emit-project
+          --format cyclonedx1.5 --output-file dist/kinekt-mcp.cdx.json
+
+      - name: Build and smoke test container artifact
+        run: |
+          docker build --target final --tag kinekt:release .
+          docker run --rm kinekt:release --help
+          docker save kinekt:release | gzip > dist/kinekt-container.tar.gz
+
+      - name: Attest tagged artifacts
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: "dist/*"
+
+      - name: Upload distributions
+        uses: actions/upload-artifact@v4
+        with:
+          name: kinekt-release-artifacts
+          path: dist/
+          if-no-files-found: error

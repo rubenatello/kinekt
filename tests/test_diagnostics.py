@@ -14,6 +14,9 @@ def test_doctor_report_defaults(tmp_path: Path, monkeypatch) -> None:
     assert "Embedding backend: deterministic" in report
     assert "Generation backend: deterministic" in report
     assert "Vector backend requested: sqlite_local" in report
+    assert "Database exists: no" in report
+    assert "Workspace attached: no" in report
+    assert not (tmp_path / ".kinekt").exists()
 
 
 def test_doctor_report_flags_non_local_endpoints(tmp_path: Path, monkeypatch) -> None:
@@ -59,7 +62,7 @@ def test_doctor_report_guides_unreachable_ollama_endpoints(tmp_path: Path, monke
     report = doctor_report(tmp_path)
     assert "Embedding endpoint reachable: no" in report
     assert "Embedding next step: install/start Ollama locally, run `ollama pull nomic-embed-text`" in report
-    assert "Kinekt will fall back to deterministic embeddings until Ollama is reachable." in report
+    assert "Embedding operations will fail until Ollama is reachable" in report
     assert "Generation endpoint reachable: no" in report
     assert "Generation next step: install/start Ollama locally, run `ollama pull llama3.1:8b`" in report
     assert "Kinekt will fall back to deterministic generation until Ollama is reachable." in report

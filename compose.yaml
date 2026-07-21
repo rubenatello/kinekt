@@ -1,0 +1,26 @@
+services:
+  kinekt:
+    build:
+      context: .
+      target: final
+      args:
+        KINEKT_UID: ${KINEKT_UID:-10001}
+        KINEKT_GID: ${KINEKT_GID:-10001}
+    image: kinekt:local
+    user: "${KINEKT_UID:-10001}:${KINEKT_GID:-10001}"
+    working_dir: /workspace
+    environment:
+      KINEKT_WORKSPACE_ROOT_ALIAS: "${KINEKT_WORKSPACE:-}"
+    volumes:
+      - type: bind
+        source: ${KINEKT_WORKSPACE:-.}
+        target: /workspace
+
+  test:
+    build:
+      context: .
+      target: test
+      args:
+        KINEKT_UID: ${KINEKT_UID:-10001}
+        KINEKT_GID: ${KINEKT_GID:-10001}
+    image: kinekt:test

@@ -1,0 +1,55 @@
+{
+  "name": "kinekt-repository-v1",
+  "cases": [
+    {
+      "id": "workspace-authorization",
+      "query": "Where are MCP workspace roots authorized and canonicalized?",
+      "relevant_paths": ["src/kinekt/workspace.py"]
+    },
+    {
+      "id": "index-fingerprint",
+      "query": "How does Kinekt detect embedding model or chunker configuration changes?",
+      "relevant_paths": ["src/kinekt/index_state.py"]
+    },
+    {
+      "id": "stale-file-pruning",
+      "query": "Where are deleted indexed files pruned from storage?",
+      "relevant_paths": ["src/kinekt/ingest.py", "src/kinekt/vector_store.py"]
+    },
+    {
+      "id": "sqlite-migrations",
+      "query": "Where are SQLite schema migrations applied and validated?",
+      "relevant_paths": ["src/kinekt/storage.py", "src/kinekt/schema.py"]
+    },
+    {
+      "id": "ollama-embedding-safety",
+      "query": "How are non-loopback Ollama embedding endpoints rejected?",
+      "relevant_paths": ["src/kinekt/embeddings.py"]
+    },
+    {
+      "id": "mcp-tools",
+      "query": "Where are query_knowledge_base and read_workspace_file registered as MCP tools?",
+      "relevant_paths": ["src/kinekt/mcp_server.py"]
+    },
+    {
+      "id": "recent-session-history",
+      "query": "How does the agent retrieve the most recent session messages?",
+      "relevant_paths": ["src/kinekt/session_store.py", "src/kinekt/agent_core.py"]
+    },
+    {
+      "id": "docker-runtime",
+      "query": "How is the non-root Docker image built with MCP and git support?",
+      "relevant_paths": ["Dockerfile", "compose.yaml"]
+    },
+    {
+      "id": "safe-git-status",
+      "query": "Where does git status disable optional locks and enforce a timeout?",
+      "relevant_paths": ["src/kinekt/tools.py"]
+    },
+    {
+      "id": "hybrid-ranking",
+      "query": "Where are vector lexical and path scores combined for hybrid retrieval?",
+      "relevant_paths": ["src/kinekt/vector_store.py"]
+    }
+  ]
+}

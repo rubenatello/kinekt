@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=77.0"]
+requires = ["setuptools>=83.0.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -8,11 +8,11 @@ version = "0.1.0"
 description = "Local-first developer context engine"
 readme = "README.md"
 requires-python = ">=3.11,<3.15"
-authors = [{ name = "Kinekt Contributors" }]
+authors = [{ name = "rubenatello" }]
 license = "MIT"
 keywords = ["developer-tools", "mcp", "local-first", "rag", "sqlite"]
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 4 - Beta",
     "Environment :: Console",
     "Intended Audience :: Developers",
     "Operating System :: OS Independent",
@@ -30,9 +30,20 @@ dependencies = []
 Homepage = "https://github.com/rubenatello/kinekt"
 Repository = "https://github.com/rubenatello/kinekt"
 Documentation = "https://github.com/rubenatello/kinekt#readme"
+Issues = "https://github.com/rubenatello/kinekt/issues"
+Changelog = "https://github.com/rubenatello/kinekt/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
-dev = ["build>=1.2.0", "pytest>=8.0", "twine>=5.0.0"]
+dev = [
+    "build>=1.2.0",
+    "mypy>=1.16.0",
+    "pip-audit>=2.9.0",
+    "pytest>=8.0",
+    "pytest-cov>=6.0",
+    "ruff>=0.12.0",
+    "setuptools>=83.0.0",
+    "twine>=5.0.0",
+]
 mcp = ["mcp>=1.10.0"]
 vector = ["chromadb>=0.5.0"]
 
@@ -42,3 +53,25 @@ kinekt = "kinekt.cli:main"
 [tool.pytest.ini_options]
 pythonpath = ["src"]
 testpaths = ["tests"]
+
+[tool.setuptools.package-data]
+kinekt = ["assets/*.png"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["B", "E", "F", "I", "UP"]
+
+[tool.mypy]
+python_version = "3.11"
+check_untyped_defs = true
+disallow_untyped_defs = true
+ignore_missing_imports = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+
+[tool.uv]
+required-version = ">=0.11.30,<0.12"

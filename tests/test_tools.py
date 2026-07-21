@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from kinekt.tools import read_workspace_file
 
 
@@ -31,3 +33,18 @@ def test_read_workspace_file_strips_utf8_bom(tmp_path: Path) -> None:
 
     content = read_workspace_file(workspace, "notes.md", max_chars=20)
     assert content == "hello"
+
+
+def test_read_workspace_file_blocks_external_symlink(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    outside = tmp_path / "outside.md"
+    outside.write_text("secret")
+    link = workspace / "link.md"
+    try:
+        link.symlink_to(outside)
+    except OSError as exc:
+        pytest.skip(f"Symlinks are unavailable in this environment: {exc}")
+
+    with pytest.raises(ValueError, match="outside workspace"):
+        read_workspace_file(workspace, "link.md")

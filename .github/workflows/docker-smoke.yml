@@ -23,3 +23,9 @@ jobs:
 
       - name: Smoke test image
         run: docker run --rm kinekt:ci --help
+
+      - name: Build test target
+        run: docker build --build-arg PYTHON_VERSION=${{ matrix.python-version }} --target test -t kinekt:test .
+
+      - name: Run tests in image
+        run: docker run --rm kinekt:test

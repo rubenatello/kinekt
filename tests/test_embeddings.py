@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 
+import pytest
+
 from kinekt import embeddings
 
 
@@ -23,7 +25,7 @@ def test_embed_text_uses_ollama_when_configured(monkeypatch) -> None:
         def __exit__(self, exc_type, exc, tb):
             return False
 
-        def read(self) -> bytes:
+        def read(self, *_args) -> bytes:
             return json.dumps({"embedding": [0.1, 0.2, 0.3]}).encode("utf-8")
 
     monkeypatch.setattr(embeddings, "urlopen", lambda *_args, **_kwargs: _FakeResponse())
@@ -35,5 +37,12 @@ def test_embed_text_rejects_non_local_ollama_endpoint(monkeypatch) -> None:
     monkeypatch.setenv("KINEKT_EMBEDDING_BACKEND", "ollama")
     monkeypatch.setenv("KINEKT_OLLAMA_URL", "http://example.com/api/embeddings")
 
-    vec = embeddings.embed_text("hello")
-    assert len(vec) == embeddings.EMBED_DIM
+    with pytest.raises(ValueError, match="loopback"):
+        embeddings.embed_text("hello")
+
+
+def test_embed_text_rejects_unknown_backend(monkeypatch) -> None:
+    monkeypatch.setenv("KINEKT_EMBEDDING_BACKEND", "unknown")
+
+    with pytest.raises(ValueError, match="Unsupported embedding backend"):
+        embeddings.embed_text("hello")

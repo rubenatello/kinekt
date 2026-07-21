@@ -1,0 +1,104 @@
+{
+  "name": "external-multi-language-v1",
+  "repositories": [
+    {
+      "id": "requests",
+      "url": "https://github.com/psf/requests.git",
+      "revision": "69f84847045bef7a849cc994a26fe7ba8a169e95",
+      "language": "python",
+      "license": "Apache-2.0",
+      "cases": [
+        {
+          "id": "session-request-flow",
+          "question_type": "execution-path",
+          "query": "Where does a Session prepare and send requests while handling redirects?",
+          "relevant_paths": ["src/requests/sessions.py"]
+        },
+        {
+          "id": "http-adapter",
+          "question_type": "boundary-handling",
+          "query": "Where is HTTPAdapter connection pooling and transport send behavior implemented?",
+          "relevant_paths": ["src/requests/adapters.py"]
+        },
+        {
+          "id": "response-model",
+          "question_type": "data-model",
+          "query": "Where does Response decode JSON and expose response content?",
+          "relevant_paths": ["src/requests/models.py"]
+        },
+        {
+          "id": "cookie-jar",
+          "question_type": "supporting-concern",
+          "query": "Where are cookie jars merged and cookies extracted from responses?",
+          "relevant_paths": ["src/requests/cookies.py"]
+        }
+      ]
+    },
+    {
+      "id": "chi",
+      "url": "https://github.com/go-chi/chi.git",
+      "revision": "8b258c7bb28f97a5f2a856ff7ef962578fec9215",
+      "language": "go",
+      "license": "MIT",
+      "cases": [
+        {
+          "id": "router-dispatch",
+          "question_type": "execution-path",
+          "query": "Where does the HTTP router match a request and dispatch ServeHTTP?",
+          "relevant_paths": ["mux.go", "tree.go"]
+        },
+        {
+          "id": "route-context",
+          "question_type": "data-model",
+          "query": "Where is request routing context stored and URL parameters retrieved?",
+          "relevant_paths": ["context.go"]
+        },
+        {
+          "id": "compression-middleware",
+          "question_type": "boundary-handling",
+          "query": "Where is response compression middleware configured and implemented?",
+          "relevant_paths": ["middleware/compress.go"]
+        },
+        {
+          "id": "request-id",
+          "question_type": "supporting-concern",
+          "query": "Where does middleware create and propagate request IDs?",
+          "relevant_paths": ["middleware/request_id.go"]
+        }
+      ]
+    },
+    {
+      "id": "serde-json",
+      "url": "https://github.com/serde-rs/json.git",
+      "revision": "de8500740cdcabffb9734f503e4889def823cf10",
+      "language": "rust",
+      "license": "MIT OR Apache-2.0",
+      "cases": [
+        {
+          "id": "serialization",
+          "question_type": "execution-path",
+          "query": "Where are JSON Serializer and to_writer serialization implemented?",
+          "relevant_paths": ["src/ser.rs"]
+        },
+        {
+          "id": "deserialization",
+          "question_type": "boundary-handling",
+          "query": "Where are JSON Deserializer and from_str deserialization implemented?",
+          "relevant_paths": ["src/de.rs"]
+        },
+        {
+          "id": "value-model",
+          "question_type": "data-model",
+          "query": "Where is the JSON Value enum defined and its object or array access documented?",
+          "relevant_paths": ["src/value/mod.rs"]
+        },
+        {
+          "id": "error-classification",
+          "question_type": "supporting-concern",
+          "query": "Where are JSON errors classified as IO syntax data or EOF errors?",
+          "relevant_paths": ["src/error.rs"]
+        }
+      ]
+    }
+  ]
+}

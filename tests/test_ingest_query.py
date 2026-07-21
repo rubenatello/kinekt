@@ -2,7 +2,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from kinekt.ingest import ingest_workspace
+from kinekt.limits import MAX_QUERY_CHARS
 from kinekt.query import query_knowledge_base
 from kinekt.storage import connect, ensure_schema
 
@@ -48,6 +51,76 @@ def test_ingest_skips_unchanged_files(tmp_path: Path) -> None:
     assert second.skipped == 1
 
 
+def test_ingest_prunes_deleted_files(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    note = workspace / "old.md"
+    note.write_text("# Old\nuniquestalecontext")
+
+    conn = connect(workspace / ".kinekt" / "kinekt.sqlite3")
+    ensure_schema(conn)
+    ingest_workspace(conn, workspace)
+    note.unlink()
+
+    stats = ingest_workspace(conn, workspace)
+
+    assert stats.pruned == 1
+    assert query_knowledge_base(conn, "uniquestalecontext", limit=5) == []
+    assert conn.execute("SELECT COUNT(*) FROM file_registry").fetchone()[0] == 0
+
+
+def test_ingest_skips_symlinked_file_outside_workspace(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    outside = tmp_path / "outside.md"
+    outside.write_text("# Secret\nuniquesymlinksecret")
+    link = workspace / "leak.md"
+    try:
+        link.symlink_to(outside)
+    except OSError as exc:
+        pytest.skip(f"Symlinks are unavailable in this environment: {exc}")
+
+    conn = connect(workspace / ".kinekt" / "kinekt.sqlite3")
+    ensure_schema(conn)
+
+    stats = ingest_workspace(conn, workspace)
+
+    assert stats.updated == 0
+    assert stats.skipped == 1
+    assert query_knowledge_base(conn, "uniquesymlinksecret", limit=5) == []
+
+
+def test_force_reindex_rebuilds_unchanged_files(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    (workspace / "notes.md").write_text("# Notes\nrebuild content")
+
+    conn = connect(workspace / ".kinekt" / "kinekt.sqlite3")
+    ensure_schema(conn)
+    ingest_workspace(conn, workspace)
+
+    stats = ingest_workspace(conn, workspace, force_rebuild=True)
+
+    assert stats.rebuilt is True
+    assert stats.updated == 1
+
+
+def test_ingest_rebuilds_when_index_configuration_changes(tmp_path: Path, monkeypatch) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    (workspace / "notes.md").write_text("# Notes\nconfiguration-aware content")
+
+    conn = connect(workspace / ".kinekt" / "kinekt.sqlite3")
+    ensure_schema(conn)
+    ingest_workspace(conn, workspace)
+    monkeypatch.setattr("kinekt.index_state.CHUNKER_VERSION", "changed-for-test")
+
+    stats = ingest_workspace(conn, workspace)
+
+    assert stats.rebuilt is True
+    assert stats.updated == 1
+
+
 def test_ingest_non_python_code_uses_code_chunks(tmp_path: Path) -> None:
     workspace = tmp_path / "workspace"
     workspace.mkdir()
@@ -69,9 +142,42 @@ def test_ingest_non_python_code_uses_code_chunks(tmp_path: Path) -> None:
     registry_row = conn.execute("SELECT file_type FROM file_registry WHERE file_path = ?", ("app.ts",)).fetchone()
 
     assert code_row is not None
-    assert dict(code_row) == {"file_path": "app.ts", "language": "ts", "construct_type": "module"}
+    assert dict(code_row) == {"file_path": "app.ts", "language": "ts", "construct_type": "function"}
     assert note_row is None
     assert registry_row["file_type"] == "code"
+
+
+def test_ingest_indexes_configuration_and_docker_files(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    (workspace / "Dockerfile").write_text("FROM python:3.11-slim")
+    (workspace / "compose.yaml").write_text("services:\n  app:\n    image: kinekt")
+
+    conn = connect(tmp_path / "kinekt.sqlite3")
+    ensure_schema(conn)
+
+    stats = ingest_workspace(conn, workspace)
+    paths = {str(row["file_path"]) for row in conn.execute("SELECT file_path FROM code_chunks")}
+    query_paths = [hit.file_path for hit in query_knowledge_base(conn, "How is the Docker image built?", limit=2)]
+
+    assert stats.updated == 2
+    assert paths == {"Dockerfile", "compose.yaml"}
+    assert "Dockerfile" in query_paths
+
+
+def test_ingest_excludes_evaluation_case_payloads(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    (workspace / "retrieval.eval.json").write_text('{"query": "self leaking query"}')
+    (workspace / "app.py").write_text("def real_code():\n    return True")
+
+    conn = connect(tmp_path / "kinekt.sqlite3")
+    ensure_schema(conn)
+
+    stats = ingest_workspace(conn, workspace)
+
+    assert stats.scanned == 1
+    assert conn.execute("SELECT COUNT(*) FROM file_registry").fetchone()[0] == 1
 
 
 def test_ingest_excludes_cache_directories(tmp_path: Path) -> None:
@@ -192,6 +298,16 @@ def test_query_limit_is_clamped(tmp_path: Path) -> None:
     assert len(results) <= 20
 
 
+def test_query_rejects_empty_and_oversized_text(tmp_path: Path) -> None:
+    conn = connect(tmp_path / "kinekt.sqlite3")
+    ensure_schema(conn)
+
+    with pytest.raises(ValueError, match="cannot be empty"):
+        query_knowledge_base(conn, "   ")
+    with pytest.raises(ValueError, match="maximum length"):
+        query_knowledge_base(conn, "x" * (MAX_QUERY_CHARS + 1))
+
+
 def test_query_can_rank_file_path_matches(tmp_path: Path) -> None:
     workspace = tmp_path / "workspace"
     workspace.mkdir()
@@ -208,7 +324,48 @@ def test_query_can_rank_file_path_matches(tmp_path: Path) -> None:
     assert results[0].file_path == "App.tsx"
 
 
-def test_query_skips_mismatched_embedding_dimensions(tmp_path: Path) -> None:
+def test_query_returns_hybrid_score_explanation_and_line_provenance(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    (workspace / "storage.py").write_text(
+        "# database helpers\n\ndef connect_database():\n    return 'sqlite'\n"
+    )
+
+    conn = connect(tmp_path / "kinekt.sqlite3")
+    ensure_schema(conn)
+    ingest_workspace(conn, workspace)
+
+    result = query_knowledge_base(conn, "connect database sqlite", limit=1)[0]
+
+    assert result.file_path == "storage.py"
+    assert result.symbol_name == "connect_database"
+    assert result.start_line == 3
+    assert result.end_line == 4
+    assert result.vector_score > 0
+    assert result.lexical_score > 0
+    assert "vector" in result.ranking_reason
+    assert "lexical" in result.ranking_reason
+
+
+def test_query_diversifies_results_by_file(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    (workspace / "many.py").write_text(
+        "def first_context():\n    return 'context'\n\n"
+        "def second_context():\n    return 'context'\n"
+    )
+    (workspace / "other.py").write_text("def other_context():\n    return 'context'\n")
+
+    conn = connect(tmp_path / "kinekt.sqlite3")
+    ensure_schema(conn)
+    ingest_workspace(conn, workspace)
+
+    results = query_knowledge_base(conn, "context", limit=5)
+
+    assert [result.file_path for result in results] == ["many.py", "other.py"]
+
+
+def test_query_rejects_legacy_index_without_configuration_metadata(tmp_path: Path) -> None:
     conn = connect(tmp_path / "kinekt.sqlite3")
     ensure_schema(conn)
     conn.execute(
@@ -220,5 +377,5 @@ def test_query_skips_mismatched_embedding_dimensions(tmp_path: Path) -> None:
     )
     conn.commit()
 
-    results = query_knowledge_base(conn, "anything", limit=5)
-    assert results == []
+    with pytest.raises(RuntimeError, match="Index metadata is missing"):
+        query_knowledge_base(conn, "anything", limit=5)

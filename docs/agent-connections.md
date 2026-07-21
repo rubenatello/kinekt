@@ -17,7 +17,7 @@ The agent remains user-selected. Kinekt supplies local context.
 For MCP-capable clients, run:
 
 ```bash
-kinekt mcp-serve
+kinekt mcp-serve --allow-workspace /path/to/workspace
 ```
 
 Then configure the client to launch that command as a stdio MCP server.
@@ -49,12 +49,15 @@ Kinekt does not auto-install Ollama, start services, or pull models.
 Users should be able to:
 
 1. Install Kinekt.
-2. Run `kinekt doctor`.
-3. Run `kinekt init`.
-4. Run `kinekt ingest`.
+2. Open a repository in any editor terminal and run `kinekt attach`.
+3. Confirm the detected root with `kinekt workspace-status`.
+4. Run `kinekt attach --ingest` or `kinekt ingest`.
 5. Run `kinekt query`.
-6. Add `kinekt mcp-serve` to their agent client.
+6. Generate reviewed configuration with `kinekt agent-setup codex`, `claude`, or `gemini`.
+7. Confirm the client sees `workspace_status` and the other Kinekt tools.
 
 If any step fails, Kinekt should return a clear error or diagnostic next step.
 
 For a practical end-to-end validation flow against a real repository, see [Test Kinekt On Another Project](test-another-project.md).
+For automatic root detection, Docker path aliases, and agent-specific setup, see
+[Workspace Detection And Agent Setup](workspace-attachment.md).

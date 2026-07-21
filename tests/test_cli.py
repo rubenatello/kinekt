@@ -11,6 +11,11 @@ from types import SimpleNamespace
 from kinekt import cli
 
 
+class _FakeConnection:
+    def close(self) -> None:
+        pass
+
+
 def _run_cli(args: list[str], cwd: Path) -> subprocess.CompletedProcess[str]:
     env = os.environ.copy()
     src_path = Path(__file__).resolve().parents[1] / "src"
@@ -30,6 +35,99 @@ def test_cli_help_smoke(tmp_path: Path) -> None:
     assert result.returncode == 0
     assert "Kinekt local-first context engine" in result.stdout
     assert "mcp-serve" in result.stdout
+    assert "attach" in result.stdout
+    assert "agent-setup" in result.stdout
+
+
+def test_build_parser_exposes_workspace_onboarding_commands() -> None:
+    parser = cli.build_parser()
+
+    attach_args = parser.parse_args(["attach", "--yes", "--ingest"])
+    setup_args = parser.parse_args(["agent-setup", "codex", "--docker"])
+    mcp_args = parser.parse_args(["mcp-serve", "--attached"])
+
+    assert attach_args.func is cli._cmd_attach
+    assert attach_args.yes is True
+    assert attach_args.ingest is True
+    assert setup_args.func is cli._cmd_agent_setup
+    assert setup_args.agent == "codex"
+    assert setup_args.docker is True
+    assert mcp_args.func is cli._cmd_mcp_serve
+    assert mcp_args.attached is True
+
+
+def test_cli_attach_ingest_and_status_from_nested_directory(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    nested = workspace / "src"
+    nested.mkdir(parents=True)
+    (workspace / "pyproject.toml").write_text("[project]\nname='demo'\n")
+    (workspace / "notes.md").write_text("# Demo\nworkspace discovery")
+
+    attach_result = _run_cli(["attach", "--yes", "--ingest", "--json"], nested)
+    status_result = _run_cli(["workspace-status", "--json"], nested)
+
+    assert attach_result.returncode == 0, attach_result.stderr
+    attached = json.loads(attach_result.stdout)
+    assert attached["root"] == str(workspace.resolve())
+    assert attached["attached"] is True
+    assert attached["database_exists"] is True
+    assert attached["ingest"]["scanned"] >= 2
+    assert status_result.returncode == 0, status_result.stderr
+    status = json.loads(status_result.stdout)
+    assert status["attached"] is True
+    assert status["database_exists"] is True
+
+
+def test_cli_attach_requires_explicit_confirmation_when_noninteractive(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    (workspace / "go.mod").write_text("module example.test/demo\n")
+
+    result = _run_cli(["attach"], workspace)
+
+    assert result.returncode == 1
+    assert "interactive terminal or --yes" in result.stderr
+    assert not (workspace / ".kinekt").exists()
+
+
+def test_cli_auto_ingest_requires_attached_workspace(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    (workspace / "pyproject.toml").write_text("[project]\nname='demo'\n")
+
+    result = _run_cli(["ingest"], workspace)
+
+    assert result.returncode == 1
+    assert "Run `kinekt attach` first" in result.stderr
+    assert not (workspace / ".kinekt").exists()
+
+
+def test_cli_agent_setup_generates_docker_codex_config(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    (workspace / "package.json").write_text("{}")
+    attach_result = _run_cli(["attach", "--yes"], workspace)
+
+    result = _run_cli(["agent-setup", "codex", "--docker", "--json"], workspace)
+
+    assert attach_result.returncode == 0, attach_result.stderr
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["agent"] == "codex"
+    assert payload["transport"] == "docker"
+    assert payload["command"] == "docker"
+    assert "[mcp_servers.kinekt]" in payload["config"]
+
+
+def test_cli_agent_setup_requires_attached_workspace(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    (workspace / "Cargo.toml").write_text("[package]\nname='demo'\n")
+
+    result = _run_cli(["agent-setup", "codex"], workspace)
+
+    assert result.returncode == 1
+    assert "Workspace is not attached" in result.stderr
 
 
 def test_cli_doctor_smoke(tmp_path: Path) -> None:
@@ -62,7 +160,7 @@ def test_cli_init_ingest_query_smoke(tmp_path: Path) -> None:
 
 def test_cmd_query_clamps_limit(monkeypatch) -> None:
     seen: dict[str, int] = {}
-    monkeypatch.setattr(cli, "_connect_workspace", lambda _workspace: object())
+    monkeypatch.setattr(cli, "_connect_workspace", lambda _workspace, **_kwargs: _FakeConnection())
 
     def fake_query(_conn, _query, limit):
         seen["limit"] = limit
@@ -93,7 +191,7 @@ def test_cmd_read_file_clamps_max_chars(monkeypatch) -> None:
 
 def test_cmd_session_history_clamps_limit(monkeypatch) -> None:
     seen: dict[str, int] = {}
-    monkeypatch.setattr(cli, "_connect_workspace", lambda _workspace: object())
+    monkeypatch.setattr(cli, "_connect_workspace", lambda _workspace, **_kwargs: _FakeConnection())
 
     def fake_list_messages(_conn, session_id, limit):
         seen["session_id"] = session_id
@@ -111,7 +209,7 @@ def test_cmd_session_history_clamps_limit(monkeypatch) -> None:
 
 def test_cmd_agent_turn_clamps_limits(monkeypatch) -> None:
     seen: dict[str, int] = {}
-    monkeypatch.setattr(cli, "_connect_workspace", lambda _workspace: object())
+    monkeypatch.setattr(cli, "_connect_workspace", lambda _workspace: _FakeConnection())
 
     def fake_agent_turn(**kwargs):
         seen["query_limit"] = kwargs["query_limit"]
@@ -145,7 +243,10 @@ def test_cmd_doctor_prints_report(monkeypatch, capsys) -> None:
 def test_main_normalizes_exceptions(monkeypatch, capsys) -> None:
     class _Parser:
         def parse_args(self):
-            return argparse.Namespace(command="query", func=lambda _args: (_ for _ in ()).throw(ValueError("bad input")))
+            def raise_invalid_argument(_args):
+                raise ValueError("bad input")
+
+            return argparse.Namespace(command="query", func=raise_invalid_argument)
 
     monkeypatch.setattr(cli, "build_parser", lambda: _Parser())
     rc = cli.main()

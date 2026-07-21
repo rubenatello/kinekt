@@ -1,0 +1,69 @@
+name: Integration Evidence
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "23 9 * * 1"
+
+jobs:
+  optional-backends:
+    name: Optional local backends and MCP
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.11.30"
+
+      - name: Install locked optional backends
+        run: uv sync --locked --python 3.11 --extra dev --extra mcp --extra vector
+
+      - name: Test Chroma and the Ollama HTTP contract
+        run: >-
+          uv run --locked python -m pytest -q
+          tests/test_chromadb_integration.py tests/test_ollama_integration.py
+
+      - name: Audit optional environment with documented Chroma exception
+        # PYSEC-2026-311 affects Chroma's network collection API; Kinekt only uses
+        # the embedded PersistentClient. SECURITY.md records the accepted boundary.
+        run: uv run --locked pip-audit --local --ignore-vuln PYSEC-2026-311
+
+      - name: Verify MCP stdio discovery
+        run: uv run --locked python scripts/check_mcp_protocol.py
+
+      - name: Verify MCP Inspector discovery
+        run: >-
+          npx -y @modelcontextprotocol/inspector@0.21.2 --cli
+          uv run --locked python -m kinekt.cli mcp-serve --allow-workspace .
+          --method tools/list
+
+  external-retrieval:
+    name: Pinned external retrieval corpus
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.11.30"
+
+      - name: Install locked evaluation environment
+        run: uv sync --locked --python 3.11 --extra dev
+
+      - name: Evaluate pinned public repositories
+        run: uv run --locked python scripts/check_external_retrieval_eval.py

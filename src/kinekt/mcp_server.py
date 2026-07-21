@@ -1,56 +1,96 @@
 from __future__ import annotations
 
 import json
+import sqlite3
+from collections.abc import Callable
+from contextlib import closing
 from pathlib import Path
 from typing import Any
 
 from .agent_core import run_agent_turn
 from .errors import normalize_exception
 from .limits import (
+    MAX_RESULT_CONTENT_CHARS,
     clamp_agent_history_window,
     clamp_agent_query_limit,
     clamp_history_limit,
     clamp_query_limit,
     clamp_read_chars,
 )
+from .logging_utils import get_logger, log_event
 from .query import query_knowledge_base as run_query_knowledge_base
 from .session_store import create_session, list_messages
-from .storage import connect, ensure_schema
+from .storage import connect, ensure_schema, validate_schema
 from .tools import get_git_context, read_workspace_file
-from .logging_utils import get_logger, log_event
+from .workspace import authorize_workspace
+from .workspace_discovery import inspect_workspace
 
 _DEFAULT_READ_CHARS = 4_000
 _LOGGER = get_logger("kinekt.mcp")
+_TOOL_DESCRIPTIONS = {
+    "agent_turn": "Run a bounded stateful context turn with retrieval and summary provenance.",
+    "get_git_context": "Return read-only branch and working-tree status for an authorized repository.",
+    "query_knowledge_base": "Search the local index and return bounded, explainable context chunks.",
+    "read_workspace_file": "Read bounded text from a path that resolves inside the authorized workspace.",
+    "session_history": "Return bounded chronological messages for a local session.",
+    "session_start": "Create or reuse a local Kinekt session.",
+    "workspace_status": "Confirm the authorized workspace, git branch, attachment, and local index state.",
+}
 
 
-def _workspace_db_path(workspace: str) -> Path:
-    return Path(workspace).resolve() / ".kinekt" / "kinekt.sqlite3"
+def _authorized_workspace(workspace: str) -> Path:
+    return authorize_workspace(Path(workspace))
 
 
-def _workspace_conn(workspace: str):
-    conn = connect(_workspace_db_path(workspace))
-    ensure_schema(conn)
+def _workspace_db_path(workspace: Path) -> Path:
+    return workspace / ".kinekt" / "kinekt.sqlite3"
+
+
+def _workspace_conn(workspace: str, *, initialize: bool = True) -> sqlite3.Connection:
+    authorized = _authorized_workspace(workspace)
+    conn = connect(_workspace_db_path(authorized), create=initialize, read_only=not initialize)
+    if initialize:
+        ensure_schema(conn)
+    else:
+        validate_schema(conn)
     return conn
 
 
 def tool_query_knowledge_base(query: str, workspace: str = ".", limit: int = 5) -> list[dict[str, Any]]:
+    """Search the local Kinekt index and return explainable, provenance-rich context chunks."""
     safe_limit = clamp_query_limit(limit)
-    conn = _workspace_conn(workspace)
-    rows = run_query_knowledge_base(conn, query, limit=safe_limit)
+    with closing(_workspace_conn(workspace, initialize=False)) as conn:
+        rows = run_query_knowledge_base(conn, query, limit=safe_limit)
     return [
         {
             "chunk_id": row.chunk_id,
             "file_path": row.file_path,
             "score": row.score,
             "source": row.source,
-            "content": row.content,
+            "content": row.content[:MAX_RESULT_CONTENT_CHARS],
+            "symbol_name": row.symbol_name,
+            "start_line": row.start_line,
+            "end_line": row.end_line,
+            "vector_score": row.vector_score,
+            "lexical_score": row.lexical_score,
+            "path_score": row.path_score,
+            "symbol_score": row.symbol_score,
+            "source_score": row.source_score,
+            "ranking_reason": row.ranking_reason,
         }
         for row in rows
     ]
 
 
 def tool_get_git_context(workspace: str = ".") -> str:
-    return get_git_context(Path(workspace))
+    """Return read-only branch and working-tree status for an authorized local repository."""
+    return get_git_context(_authorized_workspace(workspace))
+
+
+def tool_workspace_status(workspace: str = ".") -> dict[str, Any]:
+    """Return read-only identity and local Kinekt state for an authorized workspace."""
+    authorized = _authorized_workspace(workspace)
+    return inspect_workspace(authorized, detection_method="authorized").as_dict()
 
 
 def tool_read_workspace_file(
@@ -58,19 +98,22 @@ def tool_read_workspace_file(
     workspace: str = ".",
     max_chars: int = _DEFAULT_READ_CHARS,
 ) -> str:
+    """Read a bounded UTF-8 text file whose resolved target remains inside the workspace."""
     safe_max_chars = clamp_read_chars(max_chars)
-    return read_workspace_file(Path(workspace), file_path, max_chars=safe_max_chars)
+    return read_workspace_file(_authorized_workspace(workspace), file_path, max_chars=safe_max_chars)
 
 
 def tool_session_start(workspace: str = ".", session_id: str | None = None) -> str:
-    conn = _workspace_conn(workspace)
-    return create_session(conn, session_id=session_id)
+    """Create or reuse a local session in an authorized workspace."""
+    with closing(_workspace_conn(workspace)) as conn:
+        return create_session(conn, session_id=session_id)
 
 
 def tool_session_history(session_id: str, workspace: str = ".", limit: int = 30) -> list[dict[str, str]]:
-    conn = _workspace_conn(workspace)
-    safe_limit = clamp_history_limit(limit)
-    rows = list_messages(conn, session_id=session_id, limit=safe_limit)
+    """Return bounded chronological messages for a local Kinekt session."""
+    with closing(_workspace_conn(workspace, initialize=False)) as conn:
+        safe_limit = clamp_history_limit(limit)
+        rows = list_messages(conn, session_id=session_id, limit=safe_limit)
     return [
         {
             "message_id": row.message_id,
@@ -90,18 +133,26 @@ def tool_agent_turn(
     query_limit: int = 4,
     history_window: int = 6,
 ) -> dict[str, Any]:
-    conn = _workspace_conn(workspace)
-    safe_query_limit = clamp_agent_query_limit(query_limit)
-    safe_history_window = clamp_agent_history_window(history_window)
-    result = run_agent_turn(
-        conn=conn,
-        workspace=Path(workspace),
-        user_message=message,
-        session_id=session_id,
-        query_limit=safe_query_limit,
-        history_window=safe_history_window,
-    )
-    return {"session_id": result.session_id, "reply": result.reply, "hits": result.hits}
+    """Run a bounded stateful context turn and return retrieval and summary provenance."""
+    authorized = _authorized_workspace(workspace)
+    with closing(_workspace_conn(workspace)) as conn:
+        safe_query_limit = clamp_agent_query_limit(query_limit)
+        safe_history_window = clamp_agent_history_window(history_window)
+        result = run_agent_turn(
+            conn=conn,
+            workspace=authorized,
+            user_message=message,
+            session_id=session_id,
+            query_limit=safe_query_limit,
+            history_window=safe_history_window,
+        )
+    return {
+        "session_id": result.session_id,
+        "reply": result.reply,
+        "retrieval_query": result.retrieval_query,
+        "session_summary": result.session_summary,
+        "hits": result.hits,
+    }
 
 
 def _mcp_error_payload(_tool_name: str, exc: Exception) -> dict[str, str]:
@@ -109,7 +160,7 @@ def _mcp_error_payload(_tool_name: str, exc: Exception) -> dict[str, str]:
     return {"code": err.code, "message": err.message}
 
 
-def _run_tool_with_error_contract(tool_name: str, fn, **kwargs):
+def _run_tool_with_error_contract(tool_name: str, fn: Callable[..., Any], **kwargs: Any) -> Any:
     try:
         result = fn(**kwargs)
         log_event(_LOGGER, "mcp_tool_success", tool=tool_name)
@@ -137,8 +188,9 @@ def create_mcp_server() -> Any:
 
     mcp = FastMCP("kinekt")
 
-    @mcp.tool()
+    @mcp.tool(description=_TOOL_DESCRIPTIONS["query_knowledge_base"])
     def query_knowledge_base(query: str, workspace: str = ".", limit: int = 5) -> list[dict[str, Any]]:
+        """Search the local index and return bounded, explainable context chunks."""
         return _run_tool_with_error_contract(
             "query_knowledge_base",
             tool_query_knowledge_base,
@@ -147,12 +199,19 @@ def create_mcp_server() -> Any:
             limit=limit,
         )
 
-    @mcp.tool()
+    @mcp.tool(description=_TOOL_DESCRIPTIONS["get_git_context"])
     def get_git_context(workspace: str = ".") -> str:
+        """Return read-only branch and working-tree status for an authorized repository."""
         return _run_tool_with_error_contract("get_git_context", tool_get_git_context, workspace=workspace)
 
-    @mcp.tool()
+    @mcp.tool(description=_TOOL_DESCRIPTIONS["workspace_status"])
+    def workspace_status(workspace: str = ".") -> dict[str, Any]:
+        """Confirm the authorized workspace, git branch, attachment, and local index state."""
+        return _run_tool_with_error_contract("workspace_status", tool_workspace_status, workspace=workspace)
+
+    @mcp.tool(description=_TOOL_DESCRIPTIONS["read_workspace_file"])
     def read_workspace_file(file_path: str, workspace: str = ".", max_chars: int = _DEFAULT_READ_CHARS) -> str:
+        """Read bounded text from a path that resolves inside the authorized workspace."""
         return _run_tool_with_error_contract(
             "read_workspace_file",
             tool_read_workspace_file,
@@ -161,12 +220,16 @@ def create_mcp_server() -> Any:
             max_chars=max_chars,
         )
 
-    @mcp.tool()
+    @mcp.tool(description=_TOOL_DESCRIPTIONS["session_start"])
     def session_start(workspace: str = ".", session_id: str | None = None) -> str:
-        return _run_tool_with_error_contract("session_start", tool_session_start, workspace=workspace, session_id=session_id)
+        """Create or reuse a local Kinekt session."""
+        return _run_tool_with_error_contract(
+            "session_start", tool_session_start, workspace=workspace, session_id=session_id
+        )
 
-    @mcp.tool()
+    @mcp.tool(description=_TOOL_DESCRIPTIONS["session_history"])
     def session_history(session_id: str, workspace: str = ".", limit: int = 30) -> list[dict[str, str]]:
+        """Return bounded chronological messages for a local session."""
         return _run_tool_with_error_contract(
             "session_history",
             tool_session_history,
@@ -175,7 +238,7 @@ def create_mcp_server() -> Any:
             limit=limit,
         )
 
-    @mcp.tool()
+    @mcp.tool(description=_TOOL_DESCRIPTIONS["agent_turn"])
     def agent_turn(
         message: str,
         workspace: str = ".",
@@ -183,6 +246,7 @@ def create_mcp_server() -> Any:
         query_limit: int = 4,
         history_window: int = 6,
     ) -> dict[str, Any]:
+        """Run a bounded stateful context turn with retrieval and summary provenance."""
         return _run_tool_with_error_contract(
             "agent_turn",
             tool_agent_turn,

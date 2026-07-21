@@ -43,7 +43,7 @@ def test_generate_agent_reply_uses_ollama_when_configured(monkeypatch) -> None:
         def __exit__(self, exc_type, exc, tb):
             return False
 
-        def read(self) -> bytes:
+        def read(self, *_args) -> bytes:
             return json.dumps({"response": "Use kinekt ingest then query."}).encode("utf-8")
 
     import kinekt.generation as generation
